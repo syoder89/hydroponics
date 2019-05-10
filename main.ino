@@ -12,21 +12,30 @@ int pump = D8; // Instead of writing D0 over and over again, we'll write pump
 Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff);
 Timer pumpOnTimer(5*60*1000, pumpOn);
+Timer publishTimer(1*60*1000, schedulePublish);
 int pumpRunTime;
 int pumpOffTime;
 boolean pumpRunning = false;
 float rawtemp = 0.0, rawhumidity = 0.0, shuntvoltage = 0.0, busvoltage = 0.0, solarCurrent = 0.0;
 float shuntvoltage_b = 0.0, busvoltage_b = 0.0, batteryCurrent = 0.0;
 float solarPower = 0.0, batteryPower = 0.0;
+char data[256];
+boolean doPublish = false;
 
 void setup() {
+	int i;
 	Serial.begin(115200);
 	pinMode(pump, OUTPUT);
 	ina219.begin();
 	ina219_b.begin();
 	am2320.begin();
+	for (i=0;i<10;i++) {
+		readVoltages();
+		delay(1000);
+	}
 	evaluatePumpState();
 	pumpStateTimer.start();
+	publishTimer.start();
 	pumpOn();
 }
 
@@ -52,9 +61,10 @@ void readVoltages() {
 	rawhumidity = ewma_add(rawhumidity, am2320.readHumidity());
 }
 
-void printVoltages() {
+void publishSensors() {
         float solarVoltage = busvoltage + (shuntvoltage / 1000);
         float batteryVoltage = busvoltage_b + (shuntvoltage_b / 1000);
+	int uptime = millis()/1000;
 
         // Print the values into the spark values
         Serial.print("A Current: ");Serial.println(solarCurrent);
@@ -67,21 +77,27 @@ void printVoltages() {
         Serial.print("Uptime:    ");Serial.println(millis() / 1000);
 	Serial.print("Temp:      "); Serial.println(rawtemp);
 	Serial.print("Humidity:  "); Serial.println(rawhumidity);
-        String data = String::format("{ \"tags\" : {\"id\": \"%s\"},\"values\": {"
-		"\"solar_current\": %.2f,\"solar_voltage\": %.2f,\"solar_solarPower\": %.2f"
-		"\"battery_current\": %.2f,\"battery_voltage\": %.2f,\"battery_solarPower\": %.2f"
-		"\"used_solarPower\": %.2f,\"uptime\": %ld,\"temperature\": %.2f"
-		"\"humidity\": %.2f,\"pump_running\": %s,\"pump_run_time\": %d,\"pump_off_time\": %d"
+	snprintf(data, 254, "{ \"tags\" : {\"id\": \"%s\"},\"values\": {"
+		"\"Is\": %.2f,\"Vs\": %.2f,\"Ps\": %.2f,"
+		"\"Ib\": %.2f,\"Vb\": %.2f,\"Pb\": %.2f,"
+		"\"Pt\": %.2f,\"up\": %d,\"T\": %.2f,"
+		"\"H\": %.2f,\"POn\": %s,\"PRun\": %d,\"POff\": %d"
 		"}}",
 		SENSOR_ID, solarCurrent, solarVoltage, solarPower, batteryCurrent, batteryVoltage, batteryPower,
-		solarPower + batteryPower, millis()/1000, rawtemp, rawhumidity, pumpRunning ? "true" : "false",
+		solarPower + batteryPower, uptime, rawtemp, rawhumidity, pumpRunning ? "true" : "false",
 		pumpRunTime,pumpOffTime);
+	data[254] = '\0';
+	Serial.println(data);
 	Particle.publish("sensors", data, PRIVATE);
+
+}
+
+void schedulePublish() {
+	doPublish = true;
 }
 
 void evaluatePumpState() {
 	readVoltages();
-	printVoltages();
 	/* No solar */
 	if (solarPower < 1000) {
 		pumpRunTime = 5*60*1000;
@@ -120,5 +136,9 @@ void pumpOff() {
 void loop() {
 	if (Particle.connected() == false) {
 		Particle.connect();
+	}
+	if (doPublish) {
+		doPublish = false;
+		publishSensors();
 	}
 }
