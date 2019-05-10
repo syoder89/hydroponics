@@ -16,9 +16,11 @@ Timer publishTimer(5*60*1000, schedulePublish);
 int pumpRunTime;
 int pumpOffTime;
 boolean pumpRunning = false;
-float rawtemp = 0.0, rawhumidity = 0.0, shuntvoltage = 0.0, busvoltage = 0.0, solarCurrent = 0.0;
-float shuntvoltage_b = 0.0, busvoltage_b = 0.0, batteryCurrent = 0.0;
-float solarPower = 0.0, batteryPower = 0.0;
+double rawtemp = 0.0, rawhumidity = 0.0, shuntvoltage = 0.0, busvoltage = 0.0, solarCurrent = 0.0;
+double shuntvoltage_b = 0.0, busvoltage_b = 0.0, batteryCurrent = 0.0;
+double solarPower = 0.0, batteryPower = 0.0, totalPower;
+double solarVoltage = 0.0, batteryVoltage = 0.0;
+int uptime;
 char data[256];
 boolean doPublish = false;
 
@@ -29,6 +31,21 @@ void setup() {
 	ina219.begin();
 	ina219_b.begin();
 	am2320.begin();
+	Particle.variable("solarCurrent", solarCurrent);
+	Particle.variable("solarVoltage", solarVoltage);
+	Particle.variable("solarPower", solarPower);
+	Particle.variable("batCurrent", batteryCurrent);
+	Particle.variable("batVoltage", batteryVoltage);
+	Particle.variable("totalPower", batteryPower);
+	Particle.variable("totalPower", totalPower);
+	Particle.variable("uptime", uptime);
+	Particle.variable("rawtemp", rawtemp);
+	Particle.variable("rawhumidity", rawhumidity);
+	Particle.variable("pumpRunning", pumpRunning);
+	Particle.variable("pumpRunTime", pumpRunTime);
+	Particle.variable("pumpOffTime", pumpOffTime);
+	Particle.function("pumpOn", cloudPumpOn);
+	Particle.function("pumpOff", cloudPumpOff);
 	for (i=0;i<10;i++) {
 		readVoltages();
 		delay(1000);
@@ -37,11 +54,12 @@ void setup() {
 	pumpStateTimer.start();
 	publishTimer.start();
 	pumpOn();
+	doPublish = true;
 }
 
 #define EWMA_LEVEL              96
 #define EWMA_DIV                128
-float ewma_add(float old_val, float new_val)
+double ewma_add(double old_val, double new_val)
 {
 	return (new_val * (EWMA_DIV - EWMA_LEVEL) + old_val * EWMA_LEVEL) / EWMA_DIV;
 }
@@ -59,12 +77,11 @@ void readVoltages() {
 	batteryPower = ewma_add(batteryPower, ina219_b.getPower_mW());
 	rawtemp = ewma_add(rawtemp, am2320.readTemperature());
 	rawhumidity = ewma_add(rawhumidity, am2320.readHumidity());
+        solarVoltage = busvoltage + (shuntvoltage / 1000);
+        batteryVoltage = busvoltage_b + (shuntvoltage_b / 1000);
 }
 
 void publishSensors() {
-        float solarVoltage = busvoltage + (shuntvoltage / 1000);
-        float batteryVoltage = busvoltage_b + (shuntvoltage_b / 1000);
-	int uptime = millis()/1000;
 
         // Print the values into the spark values
         Serial.print("A Current: ");Serial.println(solarCurrent);
@@ -133,6 +150,18 @@ void pumpOff() {
 	pumpOnTimer.changePeriod(pumpOffTime);
 }
 
+int cloudPumpOn(String extra) {
+	pumpOnTimer.stop();
+	pumpOn();
+	return 0;
+}
+
+int cloudPumpOff(String extra) {
+	pumpOffTimer.stop();
+	pumpOff();
+	return 0;
+}
+
 void loop() {
 	if (Particle.connected() == false) {
 		Particle.connect();
@@ -141,4 +170,5 @@ void loop() {
 		doPublish = false;
 		publishSensors();
 	}
+	uptime = millis()/1000;
 }
