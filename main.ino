@@ -12,7 +12,7 @@ int pump = D8; // Instead of writing D0 over and over again, we'll write pump
 Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff);
 Timer pumpOnTimer(5*60*1000, pumpOn);
-Timer publishTimer(1*60*1000, schedulePublish);
+Timer publishTimer(5*60*1000, schedulePublish);
 int pumpRunTime;
 int pumpOffTime;
 boolean pumpRunning = false;
