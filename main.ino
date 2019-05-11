@@ -46,6 +46,7 @@ void setup() {
 	Particle.variable("pumpOffTime", pumpOffTime);
 	Particle.function("pumpOn", cloudPumpOn);
 	Particle.function("pumpOff", cloudPumpOff);
+	Particle.function("publish", cloudPublish);
 	for (i=0;i<10;i++) {
 		readVoltages();
 		delay(1000);
@@ -167,6 +168,11 @@ int cloudPumpOn(String extra) {
 int cloudPumpOff(String extra) {
 	pumpOffTimer.stop();
 	pumpOff();
+	return 0;
+}
+
+int cloudPublish(String extra) {
+	schedulePublish();
 	return 0;
 }
 
