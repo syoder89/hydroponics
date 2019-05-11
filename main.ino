@@ -75,6 +75,7 @@ void setup() {
 	evaluatePumpState();
 	pumpStateTimer.start();
 	publishTimer.start();
+	influxTimer.start();
 	pumpOn();
 	doPublish = true;
 	doInflux = true;
