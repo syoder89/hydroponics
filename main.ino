@@ -156,6 +156,10 @@ void publishInflux() {
             "\nbattery_power,sensor=" + String(SENSOR_NAME) + ",power=battery value=" + battery_power +
             "\nused_power,sensor=" + String(SENSOR_NAME) + ",power=used value=" + used_power +
             "\nrun_time,sensor=" + String(SENSOR_NAME) + " value=" + run_time +
+            "\nhumidity,sensor=" + String(SENSOR_NAME) + " value=" + humidity +
+            "\npump_running,sensor=" + String(SENSOR_NAME) + " value=" + pump_running +
+            "\npump_runtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_runtime +
+            "\npump_offtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_offtime +
             "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
         sendInflux(influxpayload);
 }
