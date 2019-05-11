@@ -1,10 +1,16 @@
 #include "Adafruit_INA219.h"
 #include "Adafruit_AM2320.h"
+#include "HttpClient.h"
 
 #define SENSOR_ID "ScottHydro"
+#define INFLUXDB_HOST "205.159.243.132"
+#define INFLUXDB_PORT 8086
+#define INFLUXDB_DB "hydroponics"
+#define SENSOR_NAME "ScottHydro"
 Adafruit_INA219 ina219;
 Adafruit_INA219 ina219_b(0x41);
 Adafruit_AM2320 am2320 = Adafruit_AM2320();
+HttpClient http;
 
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
@@ -13,6 +19,7 @@ Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff);
 Timer pumpOnTimer(5*60*1000, pumpOn);
 Timer publishTimer(5*60*1000, schedulePublish);
+Timer influxTimer(60*1000, scheduleInflux);
 int pumpRunTime;
 int pumpOffTime;
 boolean pumpRunning = false;
@@ -22,7 +29,20 @@ double solarPower = 0.0, batteryPower = 0.0, totalPower = 0.0;
 double solarVoltage = 0.0, batteryVoltage = 0.0;
 int uptime;
 char data[256];
-boolean doPublish = false;
+boolean doPublish = false, doInflux = false;
+char temperature[8];
+char solar_current[10];
+char solar_voltage[8];
+char solar_power[8];
+char battery_current[10];
+char battery_voltage[8];
+char battery_power[10];
+char used_power[10];
+char run_time[8];
+char humidity[10];
+char pump_running[8];
+char pump_runtime[8];
+char pump_offtime[9];
 
 void setup() {
 	int i;
@@ -47,6 +67,7 @@ void setup() {
 	Particle.function("pumpOn", cloudPumpOn);
 	Particle.function("pumpOff", cloudPumpOff);
 	Particle.function("publish", cloudPublish);
+	Particle.function("influx", cloudInflux);
 	for (i=0;i<10;i++) {
 		readVoltages();
 		delay(1000);
@@ -88,6 +109,62 @@ void readVoltages() {
 	totalPower = solarPower + batteryPower;
 }
 
+// Headers currently need to be set at init, useful for API keys etc.
+http_header_t headers[] = {
+	{ "Connection", "close" },
+	{ "Accept" , "application/json" },
+	{ NULL, NULL } // NOTE: Always terminate headers will NULL
+};
+
+bool sendInflux(String payload) {
+	http_request_t     request;
+	http_response_t    response;
+
+	request.hostname = INFLUXDB_HOST;
+	request.port     = INFLUXDB_PORT;
+	request.path     = "/write?db=" + String(INFLUXDB_DB);
+	request.body     = payload;
+
+	http.post(request, response, headers);
+
+	if (response.status >= 200 && response.status < 300) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+void publishInflux() {
+        sprintf(solar_current, "%.2f", solarCurrent);
+        sprintf(solar_voltage, "%.2f", solarVoltage);
+        sprintf(solar_power, "%.2f", solarPower);
+        sprintf(battery_current, "%.2f", batteryCurrent);
+        sprintf(battery_voltage, "%.2f", batteryVoltage);
+        sprintf(battery_power, "%.2f", batteryPower);
+        sprintf(used_power, "%.2f", totalPower);
+        sprintf(run_time, "%d", uptime);
+        sprintf(temperature, "%.2f", rawtemp);
+	sprintf(humidity, "%.2f", rawhumidity);
+	sprintf(pump_running, "%d", pumpRunning ? 1 : 0);
+	sprintf(pump_runtime, "%d", pumpRunTime);
+	sprintf(pump_offtime, "%d", pumpRunTime);
+	String influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + ",current=solar value=" + solar_current +
+            "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=solar value=" + solar_voltage +
+            "\nsolar_power,sensor=" + String(SENSOR_NAME) + ",power=solar value=" + solar_power +
+            "\nbattery_current,sensor=" + String(SENSOR_NAME) + ",current=battery value=" + battery_current +
+            "\nbattery_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=battery value=" + battery_voltage +
+            "\nbattery_power,sensor=" + String(SENSOR_NAME) + ",power=battery value=" + battery_power +
+            "\nused_power,sensor=" + String(SENSOR_NAME) + ",power=used value=" + used_power +
+            "\nrun_time,sensor=" + String(SENSOR_NAME) + " value=" + run_time +
+            "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
+        sendInflux(influxpayload);
+}
+
+void scheduleInflux() {
+	doInflux = true;
+	influxTimer.changePeriod(60*1000);
+}
+
 void publishSensors() {
 
         // Print the values into the spark values
@@ -114,7 +191,6 @@ void publishSensors() {
 	Serial.println(data);
 	if (!(Particle.publish("sensors", data, PRIVATE)))
 		publishTimer.changePeriod(1000);
-
 }
 
 void schedulePublish() {
@@ -176,6 +252,11 @@ int cloudPublish(String extra) {
 	return 0;
 }
 
+int cloudInflux(String extra) {
+	scheduleInflux();
+	return 0;
+}
+
 void loop() {
 	if (Particle.connected() == false) {
 		Particle.connect();
@@ -183,6 +264,10 @@ void loop() {
 	if (doPublish) {
 		doPublish = false;
 		publishSensors();
+	}
+	if (doInflux) {
+		doInflux = false;
+		publishInflux();
 	}
 	uptime = millis()/1000;
 }
