@@ -118,23 +118,23 @@ void evaluatePumpState() {
 	/* No solar */
 	if (solarPower < 1000) {
 		pumpRunTime = 5*60*1000;
-		pumpOffTime = 55*60*1000;
+		pumpOffTime = 25*60*1000;
 	/* Some sun (5W) */
 	} else if (solarPower < 5000) {
-		pumpRunTime = 5*60*1000;
-		pumpOffTime = 25*60*1000;
+		pumpRunTime = 10*60*1000;
+		pumpOffTime = 15*60*1000;
 	/* Break even sun (10W) */
 	} else if (solarPower < 10000) {
-		pumpRunTime = 5*60*1000;
-		pumpOffTime = 15*60*1000;
+		pumpRunTime = 15*60*1000;
+		pumpOffTime = 10*60*1000;
 	/* Some sun (20W) */
 	} else if (solarPower < 20000) {
-		pumpRunTime = 10*60*1000;
-		pumpOffTime = 10*60*1000;
+		pumpRunTime = 30*60*1000;
+		pumpOffTime = 5*60*1000;
 	/* Full sun (>20W) */
 	} else {
-		pumpRunTime = 10*60*1000;
-		pumpOffTime = 5*60*1000;
+		pumpRunTime = 59*60*1000;
+		pumpOffTime = 1*60*1000;
 	}
 }
 
