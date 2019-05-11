@@ -77,6 +77,7 @@ void setup() {
 	publishTimer.start();
 	pumpOn();
 	doPublish = true;
+	doInflux = true;
 }
 
 #define EWMA_LEVEL              96
