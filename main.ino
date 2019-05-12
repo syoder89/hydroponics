@@ -262,13 +262,11 @@ void pumpOff() {
 }
 
 int cloudPumpOn(String extra) {
-	pumpOnTimer.stop();
 	pumpOn();
 	return 0;
 }
 
 int cloudPumpOff(String extra) {
-	pumpOffTimer.stop();
 	pumpOff();
 	return 0;
 }
