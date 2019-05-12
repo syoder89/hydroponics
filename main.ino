@@ -15,7 +15,7 @@ HttpClient http;
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int pump = D8; // Instead of writing D0 over and over again, we'll write pump
-Timer pumpStateTimer(30*1000, evaluatePumpState);
+Timer pumpStateTimer(10*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff);
 Timer pumpOnTimer(5*60*1000, pumpOn);
 Timer publishTimer(5*60*1000, schedulePublish);
@@ -246,6 +246,14 @@ void evaluatePumpState() {
 	} else {
 		pumpRunTime = 59;
 		pumpOffTime = 1;
+	}
+	if (batteryVoltage > 14.0) {
+		pumpRunTime = 59;
+		pumpOffTime = 1;
+	}
+	else if (batteryVoltage < 11.5) {
+		pumpRunTime = 5;
+		pumpOffTime = 55;
 	}
 }
 
