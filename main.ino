@@ -15,7 +15,7 @@ HttpClient http;
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int pump = D8; // Instead of writing D0 over and over again, we'll write pump
-Timer pumpStateTimer(10*1000, evaluatePumpState);
+Timer pumpStateTimer(30*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff);
 Timer pumpOnTimer(5*60*1000, pumpOn);
 Timer publishTimer(5*60*1000, schedulePublish);
@@ -68,15 +68,13 @@ void setup() {
 	Particle.function("pumpOff", cloudPumpOff);
 	Particle.function("publish", cloudPublish);
 	Particle.function("influx", cloudInflux);
-	for (i=0;i<10;i++) {
-		readVoltages();
-		delay(1000);
-	}
+	initVoltages();
 	evaluatePumpState();
 	pumpStateTimer.start();
 	publishTimer.start();
 	influxTimer.start();
 	pumpOn();
+	uptime = millis()/1000;
 	doPublish = true;
 	doInflux = true;
 }
@@ -88,9 +86,31 @@ double ewma_add(double old_val, double new_val)
 	return (new_val * (EWMA_DIV - EWMA_LEVEL) + old_val * EWMA_LEVEL) / EWMA_DIV;
 }
 
+void initVoltages() {
+	float shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
+
+	// Current and voltage probe for the first ina219 sensor connected to the Solar Pannel
+	shuntvoltage = ina219.getShuntVoltage_mV();
+	busvoltage = ina219.getBusVoltage_V();
+	current = ina219.getCurrent_mA();
+        solarVoltage = busvoltage + (shuntvoltage / 1000);
+	solarCurrent = current;
+	solarPower = busvoltage * (current / 1000);
+	// Current and voltage probe for the second ina219 sensor connected to the battery
+	shuntvoltage_b = ina219_b.getShuntVoltage_mV();
+	busvoltage_b = ina219_b.getBusVoltage_V();
+	current_b = ina219_b.getCurrent_mA();
+        batteryVoltage = busvoltage_b + (shuntvoltage_b / 1000);
+	batteryCurrent = current_b;
+	batteryPower = busvoltage_b * (current_b / 1000);
+	rawtemp = am2320.readTemperature();
+	rawhumidity = am2320.readHumidity();
+	totalPower = solarPower + batteryPower;
+}
+
 void readVoltages() {
 	float shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
-;
+
 	// Current and voltage probe for the first ina219 sensor connected to the Solar Pannel
 	shuntvoltage = ina219.getShuntVoltage_mV();
 	busvoltage = ina219.getBusVoltage_V();
@@ -149,7 +169,7 @@ void publishInflux() {
 	sprintf(humidity, "%.2f", rawhumidity);
 	sprintf(pump_running, "%d", pumpRunning ? 1 : 0);
 	sprintf(pump_runtime, "%d", pumpRunTime);
-	sprintf(pump_offtime, "%d", pumpRunTime);
+	sprintf(pump_offtime, "%d", pumpOffTime);
 	String influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + ",current=solar value=" + solar_current +
             "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=solar value=" + solar_voltage +
             "\nsolar_power,sensor=" + String(SENSOR_NAME) + ",power=solar value=" + solar_power +
