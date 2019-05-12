@@ -250,12 +250,14 @@ void evaluatePumpState() {
 }
 
 void pumpOn() {
+	pumpOnTimer.stop();
 	pumpRunning = true;
 	digitalWrite(pump, HIGH);
 	pumpOffTimer.changePeriod(pumpRunTime * 60 * 1000);
 }
 
 void pumpOff() {
+	pumpOffTimer.stop();
 	pumpRunning = false;
 	digitalWrite(pump, LOW);
 	pumpOnTimer.changePeriod(pumpOffTime * 60 * 1000);
