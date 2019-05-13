@@ -15,7 +15,7 @@ HttpClient http;
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int pump = D8; // Instead of writing D0 over and over again, we'll write pump
-Timer pumpStateTimer(10*1000, evaluatePumpState);
+Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff);
 Timer pumpOnTimer(5*60*1000, pumpOn);
 Timer publishTimer(5*60*1000, schedulePublish);
@@ -27,6 +27,7 @@ double rawtemp = 0.0, rawhumidity = 0.0, solarCurrent = 0.0;
 double batteryCurrent = 0.0;
 double solarPower = 0.0, batteryPower = 0.0, totalPower = 0.0;
 double solarVoltage = 0.0, batteryVoltage = 0.0;
+double wSolarPower = 0.0, wBatteryVoltage = 0.0;
 int uptime;
 char data[256];
 boolean doPublish = false, doInflux = false;
@@ -43,14 +44,17 @@ char humidity[10];
 char pump_running[8];
 char pump_runtime[8];
 char pump_offtime[9];
+char wsolar_power[8];
+char wbattery_voltage[8];
 
 void setup() {
-	int i;
 	Serial.begin(115200);
 	pinMode(pump, OUTPUT);
 	ina219.begin();
 	ina219_b.begin();
 	am2320.begin();
+	Particle.variable("wSolarPower", wSolarPower);
+	Particle.variable("wBatVoltage", wBatteryVoltage);
 	Particle.variable("solarCurrent", solarCurrent);
 	Particle.variable("solarVoltage", solarVoltage);
 	Particle.variable("solarPower", solarPower);
@@ -68,7 +72,9 @@ void setup() {
 	Particle.function("pumpOff", cloudPumpOff);
 	Particle.function("publish", cloudPublish);
 	Particle.function("influx", cloudInflux);
-	initVoltages();
+	readVoltages();
+	wSolarPower = solarPower;
+        wBatteryVoltage = batteryVoltage;
 	evaluatePumpState();
 	pumpStateTimer.start();
 	publishTimer.start();
@@ -86,7 +92,7 @@ double ewma_add(double old_val, double new_val)
 	return (new_val * (EWMA_DIV - EWMA_LEVEL) + old_val * EWMA_LEVEL) / EWMA_DIV;
 }
 
-void initVoltages() {
+void readVoltages() {
 	float shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
 
 	// Current and voltage probe for the first ina219 sensor connected to the Solar Pannel
@@ -105,29 +111,6 @@ void initVoltages() {
 	batteryPower = busvoltage_b * (current_b / 1000);
 	rawtemp = am2320.readTemperature();
 	rawhumidity = am2320.readHumidity();
-	totalPower = solarPower + batteryPower;
-}
-
-void readVoltages() {
-	float shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
-
-	// Current and voltage probe for the first ina219 sensor connected to the Solar Pannel
-	shuntvoltage = ina219.getShuntVoltage_mV();
-	busvoltage = ina219.getBusVoltage_V();
-	current = ina219.getCurrent_mA();
-        solarVoltage = ewma_add(solarVoltage, busvoltage + (shuntvoltage / 1000));
-	solarCurrent = ewma_add(solarCurrent, current);
-	solarPower = ewma_add(solarPower, busvoltage * (current / 1000));
-//	solarPower = ewma_add(solarPower, ina219.getPower_mW());
-	// Current and voltage probe for the second ina219 sensor connected to the battery
-	shuntvoltage_b = ina219_b.getShuntVoltage_mV();
-	busvoltage_b = ina219_b.getBusVoltage_V();
-	current_b = ina219_b.getCurrent_mA();
-        batteryVoltage = ewma_add(batteryVoltage, busvoltage_b + (shuntvoltage_b / 1000));
-	batteryCurrent = ewma_add(batteryCurrent, current_b);
-	batteryPower = ewma_add(batteryPower, busvoltage_b * (current_b / 1000));
-	rawtemp = ewma_add(rawtemp, am2320.readTemperature());
-	rawhumidity = ewma_add(rawhumidity, am2320.readHumidity());
 	totalPower = solarPower + batteryPower;
 }
 
@@ -157,6 +140,8 @@ bool sendInflux(String payload) {
 }
 
 void publishInflux() {
+        sprintf(wsolar_power, "%.2f", wSolarPower);
+        sprintf(wbattery_voltage, "%.2f", wBatteryVoltage);
         sprintf(solar_current, "%.2f", solarCurrent);
         sprintf(solar_voltage, "%.2f", solarVoltage);
         sprintf(solar_power, "%.2f", solarPower);
@@ -173,6 +158,8 @@ void publishInflux() {
 	String influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + ",current=solar value=" + solar_current +
             "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=solar value=" + solar_voltage +
             "\nsolar_power,sensor=" + String(SENSOR_NAME) + ",power=solar value=" + solar_power +
+            "\nwsolar_power,sensor=" + String(SENSOR_NAME) + ",wpower=solar value=" + wsolar_power +
+            "\nwbattery_voltage,sensor=" + String(SENSOR_NAME) + ",wvoltage=battery value=" + wbattery_voltage +
             "\nbattery_current,sensor=" + String(SENSOR_NAME) + ",current=battery value=" + battery_current +
             "\nbattery_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=battery value=" + battery_voltage +
             "\nbattery_power,sensor=" + String(SENSOR_NAME) + ",power=battery value=" + battery_power +
@@ -226,20 +213,23 @@ void schedulePublish() {
 
 void evaluatePumpState() {
 	readVoltages();
+	wSolarPower = ewma_add(wSolarPower, solarPower);
+        wBatteryVoltage = ewma_add(wBatteryVoltage, batteryVoltage);
+
 	/* No solar */
-	if (solarPower < 1.0) {
+	if (wSolarPower < 1.0) {
 		pumpRunTime = 5;
 		pumpOffTime = 25;
 	/* Some sun (5W) */
-	} else if (solarPower < 5.0) {
+	} else if (wSolarPower < 5.0) {
 		pumpRunTime = 10;
 		pumpOffTime = 15;
 	/* Break even sun (10W) */
-	} else if (solarPower < 15.0) {
+	} else if (wSolarPower < 15.0) {
 		pumpRunTime = 15;
 		pumpOffTime = 10;
 	/* Some sun (40W) */
-	} else if (solarPower < 40.0) {
+	} else if (wSolarPower < 40.0) {
 		pumpRunTime = 30;
 		pumpOffTime = 5;
 	/* Full sun (>20W) */
@@ -247,11 +237,11 @@ void evaluatePumpState() {
 		pumpRunTime = 59;
 		pumpOffTime = 1;
 	}
-	if (batteryVoltage > 14.0) {
+	if (wBatteryVoltage > 14.0) {
 		pumpRunTime = 59;
 		pumpOffTime = 1;
 	}
-	else if (batteryVoltage < 11.5) {
+	else if (wBatteryVoltage < 11.5) {
 		pumpRunTime = 5;
 		pumpOffTime = 55;
 	}
