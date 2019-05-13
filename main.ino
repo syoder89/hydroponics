@@ -15,6 +15,7 @@ HttpClient http;
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int pump = D8; // Instead of writing D0 over and over again, we'll write pump
+Timer sensorsTimer(1000, readSensors);
 Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff, true);
 Timer pumpOnTimer(5*60*1000, pumpOn, true);
@@ -28,6 +29,7 @@ double batteryCurrent = 0.0;
 double solarPower = 0.0, batteryPower = 0.0, totalPower = 0.0;
 double solarVoltage = 0.0, batteryVoltage = 0.0;
 double wSolarPower = 0.0, wBatteryVoltage = 0.0;
+double shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
 int uptime;
 char data[256];
 boolean doPublish = false, doInflux = false;
@@ -72,13 +74,15 @@ void setup() {
 	Particle.function("pumpOff", cloudPumpOff);
 	Particle.function("publish", cloudPublish);
 	Particle.function("influx", cloudInflux);
-	readVoltages();
+	readSensors();
+	updateSensorsInit();
 	wSolarPower = solarPower;
         wBatteryVoltage = batteryVoltage;
 	evaluatePumpState();
 	pumpStateTimer.start();
 	publishTimer.start();
 	influxTimer.start();
+	sensorsTimer.start();
 	pumpOn();
 	uptime = millis()/1000;
 	doPublish = true;
@@ -92,26 +96,40 @@ double ewma_add(double old_val, double new_val)
 	return (new_val * (EWMA_DIV - EWMA_LEVEL) + old_val * EWMA_LEVEL) / EWMA_DIV;
 }
 
-void readVoltages() {
-	float shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
-
-	// Current and voltage probe for the first ina219 sensor connected to the Solar Pannel
-	shuntvoltage = ina219.getShuntVoltage_mV();
-	busvoltage = ina219.getBusVoltage_V();
-	current = ina219.getCurrent_mA();
-        solarVoltage = busvoltage + (shuntvoltage / 1000);
+void updateSensorsInit() {
+	solarVoltage = busvoltage + (shuntvoltage / 1000);
 	solarCurrent = current;
 	solarPower = busvoltage * (current / 1000);
-	// Current and voltage probe for the second ina219 sensor connected to the battery
-	shuntvoltage_b = ina219_b.getShuntVoltage_mV();
-	busvoltage_b = ina219_b.getBusVoltage_V();
-	current_b = ina219_b.getCurrent_mA();
-        batteryVoltage = busvoltage_b + (shuntvoltage_b / 1000);
+	batteryVoltage = busvoltage_b + (shuntvoltage_b / 1000);
 	batteryCurrent = current_b;
 	batteryPower = busvoltage_b * (current_b / 1000);
 	rawtemp = am2320.readTemperature();
 	rawhumidity = am2320.readHumidity();
 	totalPower = solarPower + batteryPower;
+}
+
+void updateSensors() {
+	solarVoltage = ewma_add(solarVoltage, busvoltage + (shuntvoltage / 1000));
+	solarCurrent = ewma_add(solarCurrent, current);
+	solarPower = ewma_add(solarPower, busvoltage * (current / 1000));
+	batteryVoltage = ewma_add(batteryVoltage, busvoltage_b + (shuntvoltage_b / 1000));
+	batteryCurrent = ewma_add(batteryCurrent, current_b);
+	batteryPower = ewma_add(batteryPower, busvoltage_b * (current_b / 1000));
+	rawtemp = ewma_add(rawtemp, am2320.readTemperature());
+	rawhumidity = ewma_add(rawhumidity, am2320.readHumidity());
+	totalPower = solarPower + batteryPower;
+}
+
+void readSensors() {
+	// Current and voltage probe for the first ina219 sensor connected to the Solar Pannel
+	shuntvoltage = ina219.getShuntVoltage_mV();
+	busvoltage = ina219.getBusVoltage_V();
+	current = ina219.getCurrent_mA();
+	// Current and voltage probe for the second ina219 sensor connected to the battery
+	shuntvoltage_b = ina219_b.getShuntVoltage_mV();
+	busvoltage_b = ina219_b.getBusVoltage_V();
+	current_b = ina219_b.getCurrent_mA();
+	updateSensors();
 }
 
 // Headers currently need to be set at init, useful for API keys etc.
@@ -170,7 +188,8 @@ void publishInflux() {
             "\npump_runtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_runtime +
             "\npump_offtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_offtime +
             "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
-        sendInflux(influxpayload);
+        if (!(sendInflux(influxpayload)))
+		influxTimer.changePeriod(1000);
 }
 
 void scheduleInflux() {
@@ -212,7 +231,6 @@ void schedulePublish() {
 }
 
 void evaluatePumpState() {
-	readVoltages();
 	wSolarPower = ewma_add(wSolarPower, solarPower);
         wBatteryVoltage = ewma_add(wBatteryVoltage, batteryVoltage);
 
