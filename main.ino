@@ -16,8 +16,8 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 
 int pump = D8; // Instead of writing D0 over and over again, we'll write pump
 Timer pumpStateTimer(60*1000, evaluatePumpState);
-Timer pumpOffTimer(5*60*1000, pumpOff);
-Timer pumpOnTimer(5*60*1000, pumpOn);
+Timer pumpOffTimer(5*60*1000, pumpOff, true);
+Timer pumpOnTimer(5*60*1000, pumpOn, true);
 Timer publishTimer(5*60*1000, schedulePublish);
 Timer influxTimer(60*1000, scheduleInflux);
 int pumpRunTime;
@@ -248,14 +248,12 @@ void evaluatePumpState() {
 }
 
 void pumpOn() {
-	pumpOnTimer.stop();
 	pumpRunning = true;
 	digitalWrite(pump, HIGH);
 	pumpOffTimer.changePeriod(pumpRunTime * 60 * 1000);
 }
 
 void pumpOff() {
-	pumpOffTimer.stop();
 	pumpRunning = false;
 	digitalWrite(pump, LOW);
 	pumpOnTimer.changePeriod(pumpOffTime * 60 * 1000);
