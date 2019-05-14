@@ -23,7 +23,7 @@ Timer publishTimer(5*60*1000, schedulePublish);
 Timer influxTimer(60*1000, scheduleInflux);
 int pumpRunTime;
 int pumpOffTime;
-boolean pumpRunning = false;
+boolean pumpRunning = false, pumpAuto = true;
 double rawtemp = 0.0, rawhumidity = 0.0, solarCurrent = 0.0;
 double batteryCurrent = 0.0;
 double solarPower = 0.0, batteryPower = 0.0, totalPower = 0.0;
@@ -55,21 +55,22 @@ void setup() {
 	ina219.begin();
 	ina219_b.begin();
 	am2320.begin();
-	Particle.variable("wSolarPower", wSolarPower);
-	Particle.variable("wBatVoltage", wBatteryVoltage);
-	Particle.variable("solarCurrent", solarCurrent);
-	Particle.variable("solarVoltage", solarVoltage);
-	Particle.variable("solarPower", solarPower);
-	Particle.variable("batCurrent", batteryCurrent);
-	Particle.variable("batVoltage", batteryVoltage);
-	Particle.variable("batPower", batteryPower);
-	Particle.variable("totalPower", totalPower);
-	Particle.variable("uptime", uptime);
-	Particle.variable("rawtemp", rawtemp);
-	Particle.variable("rawhumidity", rawhumidity);
+//	Particle.variable("wSolarPower", wSolarPower);
+//	Particle.variable("wBatVoltage", wBatteryVoltage);
+//	Particle.variable("solarCurrent", solarCurrent);
+//	Particle.variable("solarVoltage", solarVoltage);
+//	Particle.variable("solarPower", solarPower);
+//	Particle.variable("batCurrent", batteryCurrent);
+//	Particle.variable("batVoltage", batteryVoltage);
+//	Particle.variable("batPower", batteryPower);
+//	Particle.variable("totalPower", totalPower);
+//	Particle.variable("uptime", uptime);
+//	Particle.variable("rawtemp", rawtemp);
+//	Particle.variable("rawhumidity", rawhumidity);
 	Particle.variable("pumpRunning", pumpRunning);
-	Particle.variable("pumpRunTime", pumpRunTime);
-	Particle.variable("pumpOffTime", pumpOffTime);
+//	Particle.variable("pumpRunTime", pumpRunTime);
+//	Particle.variable("pumpOffTime", pumpOffTime);
+	Particle.function("pumpAuto", cloudPumpAuto);
 	Particle.function("pumpOn", cloudPumpOn);
 	Particle.function("pumpOff", cloudPumpOff);
 	Particle.function("publish", cloudPublish);
@@ -268,21 +269,31 @@ void evaluatePumpState() {
 void pumpOn() {
 	pumpRunning = true;
 	digitalWrite(pump, HIGH);
-	pumpOffTimer.changePeriod(pumpRunTime * 60 * 1000);
+	if (pumpAuto)
+		pumpOffTimer.changePeriod(pumpRunTime * 60 * 1000);
 }
 
 void pumpOff() {
 	pumpRunning = false;
 	digitalWrite(pump, LOW);
-	pumpOnTimer.changePeriod(pumpOffTime * 60 * 1000);
+	if (pumpAuto)
+		pumpOnTimer.changePeriod(pumpOffTime * 60 * 1000);
+}
+
+int cloudPumpAuto(String extra) {
+	pumpAuto = true;
+	pumpOn();
+	return 0;
 }
 
 int cloudPumpOn(String extra) {
+	pumpAuto = false;
 	pumpOn();
 	return 0;
 }
 
 int cloudPumpOff(String extra) {
+	pumpAuto = false;
 	pumpOff();
 	return 0;
 }
@@ -301,6 +312,7 @@ void loop() {
 	if (Particle.connected() == false) {
 		Particle.connect();
 	}
+	uptime = millis()/1000;
 	if (doPublish) {
 		doPublish = false;
 		publishSensors();
@@ -309,5 +321,4 @@ void loop() {
 		doInflux = false;
 		publishInflux();
 	}
-	uptime = millis()/1000;
 }
