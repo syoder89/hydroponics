@@ -14,12 +14,12 @@ HttpClient http;
 
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
-int pump = D8; // Instead of writing D0 over and over again, we'll write pump
+int pumpPin = D8, flowInPin = D6, flowOutPin = D4;
 Timer sensorsTimer(1000, readSensors);
 Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff, true);
 Timer pumpOnTimer(5*60*1000, pumpOn, true);
-Timer publishTimer(5*60*1000, schedulePublish);
+//Timer publishTimer(5*60*1000, schedulePublish);
 Timer influxTimer(60*1000, scheduleInflux);
 int pumpRunTime;
 int pumpOffTime;
@@ -48,10 +48,18 @@ char pump_runtime[8];
 char pump_offtime[9];
 char wsolar_power[8];
 char wbattery_voltage[8];
+char flow_rate_in[8];
+char flow_rate_out[8];
+double flowRateIn, flowRateOut, flowIn, flowOut;
+int pulsesIn = 0, pulsesOut = 0;
 
 void setup() {
 	Serial.begin(115200);
-	pinMode(pump, OUTPUT);
+	pinMode(pumpPin, OUTPUT);
+	pinMode(flowInPin, INPUT);
+	pinMode(flowOutPin, INPUT);
+	attachInterrupt(flowInPin, handleFlowRateIn, FALLING);
+	attachInterrupt(flowOutPin, handleFlowRateOut, FALLING);
 	ina219.begin();
 	ina219_b.begin();
 	am2320.begin();
@@ -68,12 +76,16 @@ void setup() {
 //	Particle.variable("rawtemp", rawtemp);
 //	Particle.variable("rawhumidity", rawhumidity);
 	Particle.variable("pumpRunning", pumpRunning);
+	Particle.variable("flowRateIn", flowRateIn);
+	Particle.variable("flowRateOut", flowRateOut);
+	Particle.variable("pulsesIn", pulsesIn);
+	Particle.variable("pulsesOut", pulsesOut);
 //	Particle.variable("pumpRunTime", pumpRunTime);
 //	Particle.variable("pumpOffTime", pumpOffTime);
 	Particle.function("pumpAuto", cloudPumpAuto);
 	Particle.function("pumpOn", cloudPumpOn);
 	Particle.function("pumpOff", cloudPumpOff);
-	Particle.function("publish", cloudPublish);
+//	Particle.function("publish", cloudPublish);
 	Particle.function("influx", cloudInflux);
 	readSensors();
 	updateSensorsInit();
@@ -81,12 +93,12 @@ void setup() {
         wBatteryVoltage = batteryVoltage;
 	evaluatePumpState();
 	pumpStateTimer.start();
-	publishTimer.start();
+//	publishTimer.start();
 	influxTimer.start();
 	sensorsTimer.start();
 	pumpOn();
 	uptime = millis()/1000;
-	doPublish = true;
+//	doPublish = true;
 	doInflux = true;
 }
 
@@ -95,6 +107,14 @@ void setup() {
 double ewma_add(double old_val, double new_val)
 {
 	return (new_val * (EWMA_DIV - EWMA_LEVEL) + old_val * EWMA_LEVEL) / EWMA_DIV;
+}
+
+void handleFlowRateIn() {
+	pulsesIn++;
+}
+
+void handleFlowRateOut() {
+	pulsesOut++;
 }
 
 void updateSensorsInit() {
@@ -107,6 +127,8 @@ void updateSensorsInit() {
 	rawtemp = am2320.readTemperature();
 	rawhumidity = am2320.readHumidity();
 	totalPower = solarPower + batteryPower;
+	flowRateIn = flowIn;
+	flowRateOut = flowOut;
 }
 
 void updateSensors() {
@@ -118,6 +140,8 @@ void updateSensors() {
 	batteryPower = ewma_add(batteryPower, busvoltage_b * (current_b / 1000));
 	rawtemp = ewma_add(rawtemp, am2320.readTemperature());
 	rawhumidity = ewma_add(rawhumidity, am2320.readHumidity());
+	flowRateIn = ewma_add(flowRateIn, flowIn);
+	flowRateOut = ewma_add(flowRateOut, flowOut);
 	totalPower = solarPower + batteryPower;
 }
 
@@ -130,6 +154,10 @@ void readSensors() {
 	shuntvoltage_b = ina219_b.getShuntVoltage_mV();
 	busvoltage_b = ina219_b.getBusVoltage_V();
 	current_b = ina219_b.getCurrent_mA();
+	flowIn = pulsesIn / (7.5 * 60);
+	flowOut = pulsesOut / (7.5 * 60);
+	pulsesIn = 0;
+	pulsesOut = 0;
 	updateSensors();
 }
 
@@ -174,6 +202,8 @@ void publishInflux() {
 	sprintf(pump_running, "%d", pumpRunning ? 1 : 0);
 	sprintf(pump_runtime, "%d", pumpRunTime);
 	sprintf(pump_offtime, "%d", pumpOffTime);
+	sprintf(flow_rate_in, "%.2f", flowRateIn);
+	sprintf(flow_rate_out, "%.2f", flowRateOut);
 	String influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + ",current=solar value=" + solar_current +
             "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=solar value=" + solar_voltage +
             "\nsolar_power,sensor=" + String(SENSOR_NAME) + ",power=solar value=" + solar_power +
@@ -188,6 +218,8 @@ void publishInflux() {
             "\npump_running,sensor=" + String(SENSOR_NAME) + " value=" + pump_running +
             "\npump_runtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_runtime +
             "\npump_offtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_offtime +
+            "\nflowRateIn,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_in +
+            "\nflowRateOut,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_out +
             "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
         if (!(sendInflux(influxpayload)))
 		influxTimer.changePeriod(1000);
@@ -198,6 +230,7 @@ void scheduleInflux() {
 	influxTimer.changePeriod(60*1000);
 }
 
+/*
 void publishSensors() {
 
         // Print the values into the spark values
@@ -230,6 +263,7 @@ void schedulePublish() {
 	doPublish = true;
 	publishTimer.changePeriod(5*60*1000);
 }
+*/
 
 void evaluatePumpState() {
 	wSolarPower = ewma_add(wSolarPower, solarPower);
@@ -268,14 +302,14 @@ void evaluatePumpState() {
 
 void pumpOn() {
 	pumpRunning = true;
-	digitalWrite(pump, HIGH);
+	digitalWrite(pumpPin, HIGH);
 	if (pumpAuto)
 		pumpOffTimer.changePeriod(pumpRunTime * 60 * 1000);
 }
 
 void pumpOff() {
 	pumpRunning = false;
-	digitalWrite(pump, LOW);
+	digitalWrite(pumpPin, LOW);
 	if (pumpAuto)
 		pumpOnTimer.changePeriod(pumpOffTime * 60 * 1000);
 }
@@ -288,20 +322,26 @@ int cloudPumpAuto(String extra) {
 
 int cloudPumpOn(String extra) {
 	pumpAuto = false;
+	pumpOnTimer.stop();
+	pumpOffTimer.stop();
 	pumpOn();
 	return 0;
 }
 
 int cloudPumpOff(String extra) {
 	pumpAuto = false;
+	pumpOnTimer.stop();
+	pumpOffTimer.stop();
 	pumpOff();
 	return 0;
 }
 
+/*
 int cloudPublish(String extra) {
 	schedulePublish();
 	return 0;
 }
+*/
 
 int cloudInflux(String extra) {
 	scheduleInflux();
@@ -313,10 +353,12 @@ void loop() {
 		Particle.connect();
 	}
 	uptime = millis()/1000;
+/*
 	if (doPublish) {
 		doPublish = false;
 		publishSensors();
 	}
+*/
 	if (doInflux) {
 		doInflux = false;
 		publishInflux();
