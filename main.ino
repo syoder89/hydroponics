@@ -16,6 +16,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 
 #define SENSOR_UPDATE_INTERVAL 3
 #define INFLUX_UPDATE_INTERVAL 30
+#define FLOWRATE_UPDATE_INTERVAL INFLUX_UPDATE_INTERVAL
 
 int pumpPin = D8, flowInPin = D4, flowOutPin = D6;
 Timer sensorsTimer(SENSOR_UPDATE_INTERVAL*1000, readSensors);
@@ -121,6 +122,15 @@ void handleFlowRateOut() {
 	pulsesOut++;
 }
 
+void updateFlowRate() {
+	flowRateIn = pulsesIn / (7.5 * FLOWRATE_UPDATE_INTERVAL);
+	flowRateOut = pulsesOut / (7.5 * FLOWRATE_UPDATE_INTERVAL);
+	pulsesIn = 0;
+	pulsesOut = 0;
+//	flowRateIn = ewma_add(flowRateIn, flowIn);
+//	flowRateOut = ewma_add(flowRateOut, flowOut);
+}
+
 void updateSensorsInit() {
 	solarVoltage = busvoltage + (shuntvoltage / 1000);
 	solarCurrent = current;
@@ -133,8 +143,8 @@ void updateSensorsInit() {
 	totalPower = solarPower + batteryPower;
 	wSolarPower = solarPower;
         wBatteryVoltage = batteryVoltage;
-	flowRateIn = flowIn;
-	flowRateOut = flowOut;
+	flowRateIn = 0;
+	flowRateOut = 0;
 }
 
 void updateSensors() {
@@ -147,12 +157,6 @@ void updateSensors() {
 	rawtemp = ewma_add(rawtemp, am2320.readTemperature());
 	rawhumidity = ewma_add(rawhumidity, am2320.readHumidity());
 	totalPower = solarPower + batteryPower;
-	flowIn = pulsesIn / (7.5 * SENSOR_UPDATE_INTERVAL);
-	flowOut = pulsesOut / (7.5 * SENSOR_UPDATE_INTERVAL);
-	pulsesIn = 0;
-	pulsesOut = 0;
-	flowRateIn = ewma_add(flowRateIn, flowIn);
-	flowRateOut = ewma_add(flowRateOut, flowOut);
 }
 
 void readSensors() {
@@ -193,6 +197,7 @@ bool sendInflux(String payload) {
 }
 
 void publishInflux() {
+	updateFlowRate();
         sprintf(wsolar_power, "%.2f", wSolarPower);
         sprintf(wbattery_voltage, "%.2f", wBatteryVoltage);
         sprintf(solar_current, "%.2f", solarCurrent);
