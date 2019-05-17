@@ -14,13 +14,16 @@ HttpClient http;
 
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
-int pumpPin = D8, flowInPin = D6, flowOutPin = D4;
-Timer sensorsTimer(1000, readSensors);
+#define SENSOR_UPDATE_INTERVAL 3
+#define INFLUX_UPDATE_INTERVAL 30
+
+int pumpPin = D8, flowInPin = D4, flowOutPin = D6;
+Timer sensorsTimer(SENSOR_UPDATE_INTERVAL*1000, readSensors);
 Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff, true);
 Timer pumpOnTimer(5*60*1000, pumpOn, true);
 //Timer publishTimer(5*60*1000, schedulePublish);
-Timer influxTimer(60*1000, scheduleInflux);
+Timer influxTimer(INFLUX_UPDATE_INTERVAL*1000, scheduleInflux);
 int pumpRunTime;
 int pumpOffTime;
 boolean pumpRunning = false, pumpAuto = true;
@@ -52,12 +55,15 @@ char flow_rate_in[8];
 char flow_rate_out[8];
 double flowRateIn, flowRateOut, flowIn, flowOut;
 int pulsesIn = 0, pulsesOut = 0;
+uint8_t lastflowpinstate, lastflowpoutstate;
 
 void setup() {
 	Serial.begin(115200);
 	pinMode(pumpPin, OUTPUT);
-	pinMode(flowInPin, INPUT);
-	pinMode(flowOutPin, INPUT);
+	pinMode(flowInPin, INPUT_PULLUP);
+	pinMode(flowOutPin, INPUT_PULLUP);
+	lastflowpinstate = digitalRead(flowInPin);
+	lastflowpoutstate = digitalRead(flowOutPin);
 	attachInterrupt(flowInPin, handleFlowRateIn, FALLING);
 	attachInterrupt(flowOutPin, handleFlowRateOut, FALLING);
 	ina219.begin();
@@ -89,8 +95,6 @@ void setup() {
 	Particle.function("influx", cloudInflux);
 	readSensors();
 	updateSensorsInit();
-	wSolarPower = solarPower;
-        wBatteryVoltage = batteryVoltage;
 	evaluatePumpState();
 	pumpStateTimer.start();
 //	publishTimer.start();
@@ -127,6 +131,8 @@ void updateSensorsInit() {
 	rawtemp = am2320.readTemperature();
 	rawhumidity = am2320.readHumidity();
 	totalPower = solarPower + batteryPower;
+	wSolarPower = solarPower;
+        wBatteryVoltage = batteryVoltage;
 	flowRateIn = flowIn;
 	flowRateOut = flowOut;
 }
@@ -140,9 +146,13 @@ void updateSensors() {
 	batteryPower = ewma_add(batteryPower, busvoltage_b * (current_b / 1000));
 	rawtemp = ewma_add(rawtemp, am2320.readTemperature());
 	rawhumidity = ewma_add(rawhumidity, am2320.readHumidity());
+	totalPower = solarPower + batteryPower;
+	flowIn = pulsesIn / (7.5 * SENSOR_UPDATE_INTERVAL);
+	flowOut = pulsesOut / (7.5 * SENSOR_UPDATE_INTERVAL);
+	pulsesIn = 0;
+	pulsesOut = 0;
 	flowRateIn = ewma_add(flowRateIn, flowIn);
 	flowRateOut = ewma_add(flowRateOut, flowOut);
-	totalPower = solarPower + batteryPower;
 }
 
 void readSensors() {
@@ -154,10 +164,6 @@ void readSensors() {
 	shuntvoltage_b = ina219_b.getShuntVoltage_mV();
 	busvoltage_b = ina219_b.getBusVoltage_V();
 	current_b = ina219_b.getCurrent_mA();
-	flowIn = pulsesIn / (7.5 * 60);
-	flowOut = pulsesOut / (7.5 * 60);
-	pulsesIn = 0;
-	pulsesOut = 0;
 	updateSensors();
 }
 
@@ -227,7 +233,7 @@ void publishInflux() {
 
 void scheduleInflux() {
 	doInflux = true;
-	influxTimer.changePeriod(60*1000);
+	influxTimer.changePeriod(INFLUX_UPDATE_INTERVAL*1000);
 }
 
 /*
