@@ -18,7 +18,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 #define INFLUX_UPDATE_INTERVAL 30
 #define FLOWRATE_UPDATE_INTERVAL INFLUX_UPDATE_INTERVAL
 
-int pumpPin = D8, flowInPin = D4, flowOutPin = D6;
+int pumpPin = D8, flowInPin = D7, flowOutPin = D6;
 Timer sensorsTimer(SENSOR_UPDATE_INTERVAL*1000, readSensors);
 Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff, true);
@@ -282,28 +282,28 @@ void evaluatePumpState() {
 
 	/* No solar */
 	if (wSolarPower < 1.0) {
-		pumpRunTime = 5;
-		pumpOffTime = 25;
+		pumpRunTime = 10;
+		pumpOffTime = 30;
 	/* Some sun (5W) */
 	} else if (wSolarPower < 5.0) {
 		pumpRunTime = 10;
-		pumpOffTime = 15;
+		pumpOffTime = 20;
 	/* Break even sun (10W) */
-	} else if (wSolarPower < 15.0) {
-		pumpRunTime = 15;
-		pumpOffTime = 10;
+	} else if (wSolarPower < 10.0) {
+		pumpRunTime = 10;
+		pumpOffTime = 15;
 	/* Some sun (40W) */
-	} else if (wSolarPower < 40.0) {
-		pumpRunTime = 30;
+	} else if (wSolarPower < 20.0) {
+		pumpRunTime = 10;
 		pumpOffTime = 5;
 	/* Full sun (>20W) */
 	} else {
-		pumpRunTime = 59;
-		pumpOffTime = 1;
+		pumpRunTime = 10;
+		pumpOffTime = 5;
 	}
 	if (wBatteryVoltage > 14.0) {
-		pumpRunTime = 59;
-		pumpOffTime = 1;
+		pumpRunTime = 10;
+		pumpOffTime = 5;
 	}
 	else if (wBatteryVoltage < 11.5) {
 		pumpRunTime = 5;
