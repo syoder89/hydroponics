@@ -292,13 +292,13 @@ void evaluatePumpState() {
 	} else if (wSolarPower < 18.0) {
 		pumpRunTime = 10;
 		pumpOffTime = 10;
-	/* Some sun (40W) */
-	} else if (wSolarPower < 40.0) {
+	/* Some sun (30W) */
+	} else if (wSolarPower < 35.0) {
 		pumpRunTime = 15;
 		pumpOffTime = 5;
-	/* Full sun (>20W) */
+	/* Full sun (>35W) */
 	} else {
-		pumpRunTime = 20;
+		pumpRunTime = 30;
 		pumpOffTime = 5;
 	}
 	if (wBatteryVoltage > 14.0) {
