@@ -301,7 +301,7 @@ void evaluatePumpState() {
 		pumpRunTime = 30;
 		pumpOffTime = 5;
 	}
-	if (wBatteryVoltage > 14.0) {
+	if (wBatteryVoltage > 14.0 || rawtemp > 38.0) {
 		pumpRunTime = 30;
 		pumpOffTime = 5;
 	}
