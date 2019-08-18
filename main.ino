@@ -1,6 +1,7 @@
 #include "Adafruit_INA219.h"
 #include "Adafruit_AM2320.h"
 #include "HttpClient.h"
+#include "math.h"
 
 #define SENSOR_ID "ScottHydro"
 #define INFLUXDB_HOST "205.159.243.132"
@@ -306,10 +307,10 @@ void evaluatePumpState() {
 		pumpOffTime = 5;
 	}
 	else if (rawtemp > 40.0) {
-		pumpRunTime = 15;
-		pumpOffTime = 5;
+		pumpRunTime = max(pumpRunTime, 15);
+		pumpOffTime = 10;
 	}
-	else if (wBatteryVoltage < 11.5) {
+	if (wBatteryVoltage < 11.5) {
 		pumpRunTime = 5;
 		pumpOffTime = 55;
 	}
