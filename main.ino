@@ -30,7 +30,7 @@ int pumpRunTime;
 int pumpOffTime;
 boolean pumpRunning = false, pumpAuto = true;
 double rawtemp = 0.0, rawhumidity = 0.0, solarCurrent = 0.0;
-double batteryCurrent = 0.0;
+double batteryCurrent = 0.0, stateOfCharge = 0.0;
 double solarPower = 0.0, batteryPower = 0.0, totalPower = 0.0;
 double solarVoltage = 0.0, batteryVoltage = 0.0;
 double wSolarPower = 0.0, wBatteryVoltage = 0.0;
@@ -55,6 +55,7 @@ char wsolar_power[8];
 char wbattery_voltage[8];
 char flow_rate_in[8];
 char flow_rate_out[8];
+char state_of_charge[8];
 double flowRateIn, flowRateOut, flowIn, flowOut;
 int pulsesIn = 0, pulsesOut = 0;
 uint8_t lastflowpinstate, lastflowpoutstate;
@@ -132,6 +133,20 @@ void updateFlowRate() {
 //	flowRateOut = ewma_add(flowRateOut, flowOut);
 }
 
+void updateStateOfCharge() {
+	double v = wBatteryVoltage;
+
+	/* Compensate for load ~0.3V with our pump setup */
+	if (pumpRunning)
+		v += 0.3;
+	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
+	stateOfCharge = (v - 11.3) / 1.5 * 100;
+	if (stateOfCharge > 100.0)
+		stateOfCharge = 100.0;
+	if (stateOfCharge < 0.0)
+		stateOfCharge = 0.0;
+}
+
 void updateSensorsInit() {
 	solarVoltage = busvoltage + (shuntvoltage / 1000);
 	solarCurrent = current;
@@ -146,6 +161,7 @@ void updateSensorsInit() {
         wBatteryVoltage = batteryVoltage;
 	flowRateIn = 0;
 	flowRateOut = 0;
+	updateStateOfCharge();
 }
 
 void updateSensors() {
@@ -170,6 +186,7 @@ void readSensors() {
 	busvoltage_b = ina219_b.getBusVoltage_V();
 	current_b = ina219_b.getCurrent_mA();
 	updateSensors();
+	updateStateOfCharge();
 }
 
 // Headers currently need to be set at init, useful for API keys etc.
@@ -216,6 +233,7 @@ void publishInflux() {
 	sprintf(pump_offtime, "%d", pumpOffTime);
 	sprintf(flow_rate_in, "%.2f", flowRateIn);
 	sprintf(flow_rate_out, "%.2f", flowRateOut);
+	sprintf(state_of_charge, "%.2f", stateOfCharge);
 	String influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + ",current=solar value=" + solar_current +
             "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=solar value=" + solar_voltage +
             "\nsolar_power,sensor=" + String(SENSOR_NAME) + ",power=solar value=" + solar_power +
@@ -232,6 +250,7 @@ void publishInflux() {
             "\npump_offtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_offtime +
             "\nflowRateIn,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_in +
             "\nflowRateOut,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_out +
+            "\nstateOfCharge,sensor=" + String(SENSOR_NAME) + " value=" + state_of_charge +
             "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
         if (!(sendInflux(influxpayload)))
 		influxTimer.changePeriod(1000);
@@ -302,15 +321,22 @@ void evaluatePumpState() {
 		pumpRunTime = 30;
 		pumpOffTime = 10;
 	}
-	if (wBatteryVoltage > 14.0 || rawtemp > 45.0) {
+	/* If it's fully charged or super hot run more */
+	if (wBatteryVoltage > 14.0 || rawtemp >= 45.0) {
 		pumpRunTime = 30;
 		pumpOffTime = 5;
-	}
-	else if (rawtemp > 40.0) {
+	/* If it's still pretty hot (>100F in the box) then run more */
+	} else if (rawtemp >= 38.0) {
 		pumpRunTime = max(pumpRunTime, 15);
 		pumpOffTime = 10;
 	}
-	if (wBatteryVoltage < 11.5) {
+	/* Below 30% SoC conserve as much as possible. This should
+	   only happen in the winter when it's cold and not sunny. */
+/*
+	if ((!pumpRunning && wBatteryVoltage < 11.8) ||
+		(pumpRunning && wBatteryVoltage < 11.5)) {
+*/
+	if (stateOfCharge < 30.0) {
 		pumpRunTime = 5;
 		pumpOffTime = 55;
 	}
