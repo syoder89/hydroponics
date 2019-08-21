@@ -134,7 +134,7 @@ void updateFlowRate() {
 }
 
 void updateStateOfCharge() {
-	double v = wBatteryVoltage;
+	double v = batteryVoltage;
 
 	/* Compensate for load ~0.3V with our pump setup */
 	if (pumpRunning)
