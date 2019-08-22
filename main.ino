@@ -165,6 +165,18 @@ void updateSensorsInit() {
 }
 
 void updateSensors() {
+	solarVoltage = busvoltage + (shuntvoltage / 1000);
+	solarCurrent = current;
+	solarPower = busvoltage * (current / 1000);
+	batteryVoltage = busvoltage_b + (shuntvoltage_b / 1000);
+	batteryCurrent = current_b;
+	batteryPower = busvoltage_b * (current_b / 1000);
+	rawtemp = am2320.readTemperature();
+	rawhumidity = am2320.readHumidity();
+	totalPower = solarPower + batteryPower;
+}
+
+void updateSensors_w() {
 	solarVoltage = ewma_add(solarVoltage, busvoltage + (shuntvoltage / 1000));
 	solarCurrent = ewma_add(solarCurrent, current);
 	solarPower = ewma_add(solarPower, busvoltage * (current / 1000));
