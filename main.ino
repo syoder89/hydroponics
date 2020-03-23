@@ -139,8 +139,12 @@ void updateStateOfCharge() {
 	/* Compensate for load ~0.3V with our pump setup */
 	if (pumpRunning)
 		v += 0.3;
+	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
+	/* Max voltage is 14.4 minus 12.8 = 1.6, panel is 45W */
+	v -= (solarPower / 45.0) * 1.6;
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
-	stateOfCharge = (v - 11.3) / 1.5 * 100;
+	/* Now my battery is done at 11.7V */
+	stateOfCharge = (v - 11.7) / 1.5 * 100;
 	if (stateOfCharge > 100.0)
 		stateOfCharge = 100.0;
 	if (stateOfCharge < 0.0)
@@ -315,15 +319,15 @@ void evaluatePumpState() {
 	/* No solar */
 	if (wSolarPower < 1.0) {
 		pumpRunTime = 5;
-		pumpOffTime = 30;
+		pumpOffTime = 55;
 	/* Some sun (10W) */
 	} else if (wSolarPower < 10.0) {
 		pumpRunTime = 5;
-		pumpOffTime = 20;
+		pumpOffTime = 25;
 	/* Almost break even sun (18W) */
 	} else if (wSolarPower < 18.0) {
 		pumpRunTime = 10;
-		pumpOffTime = 15;
+		pumpOffTime = 20;
 	/* Some sun (30W) */
 	} else if (wSolarPower < 35.0) {
 		pumpRunTime = 15;
@@ -342,15 +346,15 @@ void evaluatePumpState() {
 		pumpRunTime = max(pumpRunTime, 15);
 		pumpOffTime = 10;
 	}
-	/* Below 30% SoC conserve as much as possible. This should
+	/* Below 40% SoC conserve as much as possible. This should
 	   only happen in the winter when it's cold and not sunny. */
 /*
 	if ((!pumpRunning && wBatteryVoltage < 11.8) ||
 		(pumpRunning && wBatteryVoltage < 11.5)) {
 */
-	if (stateOfCharge < 30.0) {
-		pumpRunTime = 5;
-		pumpOffTime = 55;
+	if (stateOfCharge < 40.0) {
+		pumpRunTime = 1;
+		pumpOffTime = 119;
 	}
 }
 
