@@ -140,8 +140,8 @@ void updateStateOfCharge() {
 	if (pumpRunning)
 		v += 0.3;
 	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
-	/* Max voltage is 14.4 minus 12.8 = 1.6, panel is 45W */
-	v -= (solarPower / 45.0) * 1.6;
+	/* Max voltage is 14.4 minus 12.8 = 1.6, panel is 50W */
+	v -= (solarPower / 50.0) * 1.6;
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
 	/* Now my battery is done at 11.7V */
 	stateOfCharge = (v - 11.7) / 1.5 * 100;
