@@ -144,7 +144,7 @@ void updateStateOfCharge() {
 	v -= (solarPower / 50.0) * (v - 12.8);
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
 	/* Now my battery is done at 11.7V */
-	stateOfCharge = (v - 11.7) / 1.5 * 100;
+	stateOfCharge = (v - 11.7) / 1.1 * 100;
 	if (stateOfCharge > 100.0)
 		stateOfCharge = 100.0;
 	if (stateOfCharge < 0.0)
