@@ -330,16 +330,16 @@ void evaluatePumpState() {
 		pumpOffTime = 20;
 	/* Some sun (30W) */
 	} else if (wSolarPower < 35.0) {
-		pumpRunTime = 15;
+		pumpRunTime = 10;
 		pumpOffTime = 10;
 	/* Full sun (>35W) */
 	} else {
-		pumpRunTime = 30;
+		pumpRunTime = 15;
 		pumpOffTime = 10;
 	}
 	/* If it's fully charged or super hot run more */
 	if (wBatteryVoltage > 14.0 || rawtemp >= 45.0) {
-		pumpRunTime = 30;
+		pumpRunTime = 15;
 		pumpOffTime = 5;
 	/* If it's still pretty hot (>100F in the box) then run more */
 	} else if (rawtemp >= 38.0) {
