@@ -134,14 +134,14 @@ void updateFlowRate() {
 }
 
 void updateStateOfCharge() {
-	double v = batteryVoltage;
+	double v = wBatteryVoltage;
 
 	/* Compensate for load ~0.3V with our pump setup */
 	if (pumpRunning)
 		v += 0.3;
 	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
 	/* Charge voltage appears fairly linear up to max, panel is 50W */
-	v -= (solarPower / 50.0) * (v - 12.8);
+	v -= (wSolarPower / 50.0) * (v - 12.8);
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
 	/* Now my battery is done at 11.7V */
 	stateOfCharge = (v - 11.7) / 1.1 * 100;
@@ -319,31 +319,31 @@ void evaluatePumpState() {
 	/* No solar */
 	if (wSolarPower < 1.0) {
 		pumpRunTime = 5;
-		pumpOffTime = 55;
+		pumpOffTime = 25;
 	/* Some sun (10W) */
 	} else if (wSolarPower < 10.0) {
 		pumpRunTime = 5;
-		pumpOffTime = 25;
+		pumpOffTime = 20;
 	/* Almost break even sun (18W) */
 	} else if (wSolarPower < 18.0) {
 		pumpRunTime = 10;
 		pumpOffTime = 20;
 	/* Some sun (30W) */
 	} else if (wSolarPower < 35.0) {
-		pumpRunTime = 10;
+		pumpRunTime = 20;
 		pumpOffTime = 10;
 	/* Full sun (>35W) */
 	} else {
-		pumpRunTime = 15;
+		pumpRunTime = 30;
 		pumpOffTime = 10;
 	}
 	/* If it's fully charged or super hot run more */
 	if (wBatteryVoltage > 14.0 || rawtemp >= 45.0) {
-		pumpRunTime = 15;
+		pumpRunTime = 30;
 		pumpOffTime = 5;
 	/* If it's still pretty hot (>100F in the box) then run more */
 	} else if (rawtemp >= 38.0) {
-		pumpRunTime = max(pumpRunTime, 15);
+		pumpRunTime = max(pumpRunTime, 30);
 		pumpOffTime = 10;
 	}
 	/* Below 40% SoC conserve as much as possible. This should
