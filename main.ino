@@ -141,7 +141,10 @@ void updateStateOfCharge() {
 		v += 0.3;
 	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
 	/* Charge voltage appears fairly linear up to max, panel is 45W */
-	v -= (solarPower / 45.0) * (v - 12.8);
+	if (v > 12.8)
+		v -= (solarPower / 45.0) * (v - 12.8);
+	else
+		v -= (solarPower / 45.0) * (12.8 - v);
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
 	/* Now my battery is done at 11.7V */
 
