@@ -134,17 +134,21 @@ void updateFlowRate() {
 }
 
 void updateStateOfCharge() {
-	double v = wBatteryVoltage;
+	double v = batteryVoltage;
 
 	/* Compensate for load ~0.3V with our pump setup */
 	if (pumpRunning)
 		v += 0.3;
 	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
-	/* Charge voltage appears fairly linear up to max, panel is 50W */
-	v -= (wSolarPower / 50.0) * (v - 12.8);
+	/* Charge voltage appears fairly linear up to max, panel is 45W */
+	v -= (solarPower / 45.0) * (v - 12.8);
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
 	/* Now my battery is done at 11.7V */
-	stateOfCharge = (v - 11.7) / 1.1 * 100;
+
+	if (stateOfCharge > 0.0)
+		stateOfCharge = ewma_add(stateOfCharge, (v - 11.7) / 1.1 * 100);
+	else // Initialize it
+		stateOfCharge = (v - 11.7) / 1.1 * 100;
 	if (stateOfCharge > 100.0)
 		stateOfCharge = 100.0;
 	if (stateOfCharge < 0.0)
