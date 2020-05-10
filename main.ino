@@ -149,9 +149,9 @@ void updateStateOfCharge() {
 	/* Now my battery is done at 11.7V */
 
 	if (stateOfCharge > 0.0)
-		stateOfCharge = ewma_add(stateOfCharge, (v - 11.7) / 1.1 * 100);
+		stateOfCharge = ewma_add(stateOfCharge, (v - 11.3) / 1.5 * 100);
 	else // Initialize it
-		stateOfCharge = (v - 11.7) / 1.1 * 100;
+		stateOfCharge = (v - 11.3) / 1.5 * 100;
 	if (stateOfCharge > 100.0)
 		stateOfCharge = 100.0;
 	if (stateOfCharge < 0.0)
@@ -353,13 +353,13 @@ void evaluatePumpState() {
 		pumpRunTime = max(pumpRunTime, 30);
 		pumpOffTime = 10;
 	}
-	/* Below 40% SoC conserve as much as possible. This should
+	/* Below 30% SoC conserve as much as possible. This should
 	   only happen in the winter when it's cold and not sunny. */
 /*
 	if ((!pumpRunning && wBatteryVoltage < 11.8) ||
 		(pumpRunning && wBatteryVoltage < 11.5)) {
 */
-	if (stateOfCharge < 40.0) {
+	if (stateOfCharge < 30.0) {
 		pumpRunTime = 1;
 		pumpOffTime = 119;
 	}
