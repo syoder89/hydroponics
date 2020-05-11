@@ -19,6 +19,10 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 #define INFLUX_UPDATE_INTERVAL 30
 #define FLOWRATE_UPDATE_INTERVAL INFLUX_UPDATE_INTERVAL
 
+// 36 AH Deka Solar 12V Gel Deep Cycle Battery
+#define BATTERY_CAPACITY 36000
+#define DT SENSOR_UPDATE_INTERVAL / (60*60)
+
 int pumpPin = D8, flowInPin = D7, flowOutPin = D6;
 Timer sensorsTimer(SENSOR_UPDATE_INTERVAL*1000, readSensors);
 Timer pumpStateTimer(60*1000, evaluatePumpState);
@@ -133,25 +137,23 @@ void updateFlowRate() {
 //	flowRateOut = ewma_add(flowRateOut, flowOut);
 }
 
-void updateStateOfCharge() {
+void initialStateOfCharge() {
 	double v = batteryVoltage;
 
-	/* Compensate for load ~0.3V with our pump setup */
-	if (pumpRunning)
-		v += 0.3;
 	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
 	/* Charge voltage appears fairly linear up to max, panel is 45W */
-	if (v > 12.8)
-		v -= (solarPower / 45.0) * (v - 12.8);
-	else
-		v -= (solarPower / 45.0) * (12.8 - v);
+	v -= (solarPower / 45.0) * 1.6;
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
-	/* Now my battery is done at 11.7V */
 
-	if (stateOfCharge > 0.0)
-		stateOfCharge = ewma_add(stateOfCharge, (v - 11.3) / 1.5 * 100);
-	else // Initialize it
-		stateOfCharge = (v - 11.3) / 1.5 * 100;
+	stateOfCharge = (v - 11.3) / 1.5 * 100;
+	if (stateOfCharge > 100.0)
+		stateOfCharge = 100.0;
+	if (stateOfCharge < 0.0)
+		stateOfCharge = 0.0;
+}
+
+void updateStateOfCharge() {
+	stateOfCharge -= (100 * ((batteryCurrent / BATTERY_CAPACITY) * DT));
 	if (stateOfCharge > 100.0)
 		stateOfCharge = 100.0;
 	if (stateOfCharge < 0.0)
@@ -172,7 +174,7 @@ void updateSensorsInit() {
         wBatteryVoltage = batteryVoltage;
 	flowRateIn = 0;
 	flowRateOut = 0;
-	updateStateOfCharge();
+	initialStateOfCharge();
 }
 
 void updateSensors() {
