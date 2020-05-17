@@ -20,8 +20,10 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 #define FLOWRATE_UPDATE_INTERVAL INFLUX_UPDATE_INTERVAL
 
 // 36 AH Deka Solar 12V Gel Deep Cycle Battery
-#define BATTERY_CAPACITY 36000
-#define DT SENSOR_UPDATE_INTERVAL / (60*60)
+//#define BATTERY_CAPACITY 36000
+// My battery isn't doing so good these days
+#define BATTERY_CAPACITY 10140
+#define DT SENSOR_UPDATE_INTERVAL / 3600
 
 int pumpPin = D8, flowInPin = D7, flowOutPin = D6;
 Timer sensorsTimer(SENSOR_UPDATE_INTERVAL*1000, readSensors);
@@ -33,12 +35,14 @@ Timer influxTimer(INFLUX_UPDATE_INTERVAL*1000, scheduleInflux);
 int pumpRunTime;
 int pumpOffTime;
 boolean pumpRunning = false, pumpAuto = true;
+boolean didFullCharge = false;
 double rawtemp = 0.0, rawhumidity = 0.0, solarCurrent = 0.0;
-double batteryCurrent = 0.0, stateOfCharge = 0.0;
+double batteryCurrent = 0.0, stateOfCharge = 0.0, accumulatedAH = 0.0;
 double solarPower = 0.0, batteryPower = 0.0, totalPower = 0.0;
 double solarVoltage = 0.0, batteryVoltage = 0.0;
 double wSolarPower = 0.0, wBatteryVoltage = 0.0;
 double shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
+double batteryCapacity = BATTERY_CAPACITY;
 int uptime;
 char data[256];
 boolean doPublish = false, doInflux = false;
@@ -60,6 +64,8 @@ char wbattery_voltage[8];
 char flow_rate_in[8];
 char flow_rate_out[8];
 char state_of_charge[8];
+char accumulated_ah[8];
+char battery_cap[8];
 double flowRateIn, flowRateOut, flowIn, flowOut;
 int pulsesIn = 0, pulsesOut = 0;
 uint8_t lastflowpinstate, lastflowpoutstate;
@@ -93,6 +99,8 @@ void setup() {
 	Particle.variable("flowRateOut", flowRateOut);
 	Particle.variable("pulsesIn", pulsesIn);
 	Particle.variable("pulsesOut", pulsesOut);
+	Particle.variable("accumulatedAH", accumulatedAH);
+	Particle.variable("batteryCapacity", batteryCapacity);
 //	Particle.variable("pumpRunTime", pumpRunTime);
 //	Particle.variable("pumpOffTime", pumpOffTime);
 	Particle.function("pumpAuto", cloudPumpAuto);
@@ -153,11 +161,25 @@ void initialStateOfCharge() {
 }
 
 void updateStateOfCharge() {
-	stateOfCharge -= (100 * ((batteryCurrent / BATTERY_CAPACITY) * DT));
-	if (stateOfCharge > 100.0)
+	/* Accumulated AH keeps track of battery capacity. It should be 0 at full charge and goes
+	   negative as we draw power from it. */
+	accumulatedAH -= (batteryCurrent * DT);
+	/* Not intuitive. Current is negative when we're charging so it will be approaching 0 for full charge. */
+	if (accumulatedAH > 0.0)
+		accumulatedAH = 0.0;
+	stateOfCharge -= (100 * ((batteryCurrent / batteryCapacity) * DT));
+	if (stateOfCharge > 100.0 || batteryVoltage > 14.4) {
 		stateOfCharge = 100.0;
-	if (stateOfCharge < 0.0)
+		accumulatedAH = 0.0;
+		didFullCharge = true;
+	}
+	if (stateOfCharge < 0.0 || batteryVoltage < 11.0) {
 		stateOfCharge = 0.0;
+		/* Recalibrate capacity based on Amp-Hours drawn from it. Note this only works if we hit full charge first */
+		if (didFullCharge)
+			batteryCapacity = ewma_add(batteryCapacity, -1.0 * accumulatedAH);
+		didFullCharge = false;
+	}
 }
 
 void updateSensorsInit() {
@@ -259,6 +281,8 @@ void publishInflux() {
 	sprintf(flow_rate_in, "%.2f", flowRateIn);
 	sprintf(flow_rate_out, "%.2f", flowRateOut);
 	sprintf(state_of_charge, "%.2f", stateOfCharge);
+	sprintf(accumulated_ah, "%.2f", accumulatedAH);
+	sprintf(battery_cap, "%.2f", batteryCapacity);
 	String influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + ",current=solar value=" + solar_current +
             "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=solar value=" + solar_voltage +
             "\nsolar_power,sensor=" + String(SENSOR_NAME) + ",power=solar value=" + solar_power +
@@ -276,6 +300,8 @@ void publishInflux() {
             "\nflowRateIn,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_in +
             "\nflowRateOut,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_out +
             "\nstateOfCharge,sensor=" + String(SENSOR_NAME) + " value=" + state_of_charge +
+            "\naccumulatedAH,sensor=" + String(SENSOR_NAME) + " value=" + accumulated_ah +
+            "\nbatteryCap,sensor=" + String(SENSOR_NAME) + " value=" + battery_cap +
             "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
         if (!(sendInflux(influxpayload)))
 		influxTimer.changePeriod(1000);
