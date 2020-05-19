@@ -148,7 +148,7 @@ void updateStateOfCharge() {
 	if (accumulatedAH > 0.0)
 		accumulatedAH = 0.0;
 	stateOfCharge -= (100 * ((batteryCurrent / batteryCapacity) * DT));
-	if (stateOfCharge > 100.0 || batteryVoltage > 14.4) {
+	if (stateOfCharge > 100.0 || batteryVoltage > 14.1) {
 		stateOfCharge = 100.0;
 		accumulatedAH = 0.0;
 		didFullCharge = true;
