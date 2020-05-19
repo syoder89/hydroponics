@@ -18,6 +18,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 #define SENSOR_UPDATE_INTERVAL 3
 #define INFLUX_UPDATE_INTERVAL 30
 #define FLOWRATE_UPDATE_INTERVAL INFLUX_UPDATE_INTERVAL
+#define HTTP_TIMEOUT 2500
 
 // 36 AH Deka Solar 12V Gel Deep Cycle Battery
 //#define BATTERY_CAPACITY 36000
@@ -44,28 +45,7 @@ double wSolarPower = 0.0, wBatteryVoltage = 0.0;
 double shuntvoltage, shuntvoltage_b, busvoltage, busvoltage_b, current, current_b;
 double batteryCapacity = BATTERY_CAPACITY;
 int uptime;
-char data[256];
 boolean doPublish = false, doInflux = false;
-char temperature[8];
-char solar_current[10];
-char solar_voltage[8];
-char solar_power[8];
-char battery_current[10];
-char battery_voltage[8];
-char battery_power[10];
-char used_power[10];
-char run_time[8];
-char humidity[10];
-char pump_running[8];
-char pump_runtime[8];
-char pump_offtime[9];
-char wsolar_power[8];
-char wbattery_voltage[8];
-char flow_rate_in[8];
-char flow_rate_out[8];
-char state_of_charge[8];
-char accumulated_ah[8];
-char battery_cap[8];
 double flowRateIn, flowRateOut, flowIn, flowOut;
 int pulsesIn = 0, pulsesOut = 0;
 uint8_t lastflowpinstate, lastflowpoutstate;
@@ -99,8 +79,8 @@ void setup() {
 	Particle.variable("flowRateOut", flowRateOut);
 	Particle.variable("pulsesIn", pulsesIn);
 	Particle.variable("pulsesOut", pulsesOut);
-	Particle.variable("accumulatedAH", accumulatedAH);
-	Particle.variable("batteryCapacity", batteryCapacity);
+//	Particle.variable("accumulatedAH", accumulatedAH);
+//	Particle.variable("batteryCapacity", batteryCapacity);
 //	Particle.variable("pumpRunTime", pumpRunTime);
 //	Particle.variable("pumpOffTime", pumpOffTime);
 	Particle.function("pumpAuto", cloudPumpAuto);
@@ -243,7 +223,7 @@ http_header_t headers[] = {
 	{ NULL, NULL } // NOTE: Always terminate headers will NULL
 };
 
-bool sendInflux(String payload) {
+bool sendInflux(char *payload) {
 	http_request_t     request;
 	http_response_t    response;
 
@@ -251,6 +231,7 @@ bool sendInflux(String payload) {
 	request.port     = INFLUXDB_PORT;
 	request.path     = "/write?db=" + String(INFLUXDB_DB);
 	request.body     = payload;
+	request.timeout  = HTTP_TIMEOUT;
 
 	http.post(request, response, headers);
 
@@ -261,10 +242,43 @@ bool sendInflux(String payload) {
 	}
 }
 
+#define INFLUX_MAXLEN 1024
 void publishInflux() {
+	static char payload[INFLUX_MAXLEN];
+
 	updateFlowRate();
-        sprintf(wsolar_power, "%.2f", wSolarPower);
-        sprintf(wbattery_voltage, "%.2f", wBatteryVoltage);
+
+	snprintf(payload, INFLUX_MAXLEN, "solar_current,sensor=%s value=%.2f", SENSOR_NAME, solarCurrent);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nsolar_voltage,sensor=%s value=%.2f", SENSOR_NAME, solarVoltage);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nsolar_power,sensor=%s value=%.2f", SENSOR_NAME, solarPower);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nbattery_current,sensor=%s value=%.2f", SENSOR_NAME, batteryCurrent);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nbattery_voltage,sensor=%s value=%.2f", SENSOR_NAME, batteryVoltage);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nbattery_power,sensor=%s value=%.2f", SENSOR_NAME, batteryPower);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nused_power,sensor=%s value=%.2f", SENSOR_NAME, totalPower);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nrun_time,sensor=%s value=%d", SENSOR_NAME, uptime);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\ntemperature,sensor=%s value=%.2f", SENSOR_NAME, rawtemp);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nhumidity,sensor=%s value=%.2f", SENSOR_NAME, rawhumidity);
+        if (!(sendInflux(payload))) {
+		influxTimer.changePeriod(1000);
+		return;
+	}
+
+	snprintf(payload, INFLUX_MAXLEN - strlen(payload), "pump_running,sensor=%s value=%d", SENSOR_NAME, pumpRunning ? 1 : 0);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\npump_runtime,sensor=%s value=%d", SENSOR_NAME, pumpRunTime);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\npump_offtime,sensor=%s value=%d", SENSOR_NAME, pumpOffTime);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nflowRateIn,sensor=%s value=%.2f", SENSOR_NAME, flowRateIn);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nflowRateOut,sensor=%s value=%.2f", SENSOR_NAME, flowRateOut);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nstateOfCharge,sensor=%s value=%.2f", SENSOR_NAME, stateOfCharge);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\naccumulatedAH,sensor=%s value=%.2f", SENSOR_NAME, accumulatedAH);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nbatteryCap,sensor=%s value=%.2f", SENSOR_NAME, batteryCapacity);
+        if (!(sendInflux(payload))) {
+		influxTimer.changePeriod(1000);
+		return;
+	}
+/*
+	String influxpayload;
+
+	updateFlowRate();
         sprintf(solar_current, "%.2f", solarCurrent);
         sprintf(solar_voltage, "%.2f", solarVoltage);
         sprintf(solar_power, "%.2f", solarPower);
@@ -275,6 +289,7 @@ void publishInflux() {
         sprintf(run_time, "%d", uptime);
         sprintf(temperature, "%.2f", rawtemp);
 	sprintf(humidity, "%.2f", rawhumidity);
+
 	sprintf(pump_running, "%d", pumpRunning ? 1 : 0);
 	sprintf(pump_runtime, "%d", pumpRunTime);
 	sprintf(pump_offtime, "%d", pumpOffTime);
@@ -283,28 +298,31 @@ void publishInflux() {
 	sprintf(state_of_charge, "%.2f", stateOfCharge);
 	sprintf(accumulated_ah, "%.2f", accumulatedAH);
 	sprintf(battery_cap, "%.2f", batteryCapacity);
-	String influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + ",current=solar value=" + solar_current +
-            "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=solar value=" + solar_voltage +
-            "\nsolar_power,sensor=" + String(SENSOR_NAME) + ",power=solar value=" + solar_power +
-            "\nwsolar_power,sensor=" + String(SENSOR_NAME) + ",wpower=solar value=" + wsolar_power +
-            "\nwbattery_voltage,sensor=" + String(SENSOR_NAME) + ",wvoltage=battery value=" + wbattery_voltage +
-            "\nbattery_current,sensor=" + String(SENSOR_NAME) + ",current=battery value=" + battery_current +
-            "\nbattery_voltage,sensor=" + String(SENSOR_NAME) + ",voltage=battery value=" + battery_voltage +
-            "\nbattery_power,sensor=" + String(SENSOR_NAME) + ",power=battery value=" + battery_power +
-            "\nused_power,sensor=" + String(SENSOR_NAME) + ",power=used value=" + used_power +
+
+	influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + " value=" + solar_current +
+            "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + " value=" + solar_voltage +
+            "\nsolar_power,sensor=" + String(SENSOR_NAME) + " value=" + solar_power +
+            "\nbattery_current,sensor=" + String(SENSOR_NAME) + " value=" + battery_current +
+            "\nbattery_voltage,sensor=" + String(SENSOR_NAME) + " value=" + battery_voltage +
+            "\nbattery_power,sensor=" + String(SENSOR_NAME) + " value=" + battery_power +
+            "\nused_power,sensor=" + String(SENSOR_NAME) + " value=" + used_power +
             "\nrun_time,sensor=" + String(SENSOR_NAME) + " value=" + run_time +
             "\nhumidity,sensor=" + String(SENSOR_NAME) + " value=" + humidity +
-            "\npump_running,sensor=" + String(SENSOR_NAME) + " value=" + pump_running +
+            "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
+
+        sendInflux(influxpayload);
+	influxpayload = "pump_running,sensor=" + String(SENSOR_NAME) + " value=" + pump_running +
             "\npump_runtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_runtime +
             "\npump_offtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_offtime +
             "\nflowRateIn,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_in +
             "\nflowRateOut,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_out +
             "\nstateOfCharge,sensor=" + String(SENSOR_NAME) + " value=" + state_of_charge +
             "\naccumulatedAH,sensor=" + String(SENSOR_NAME) + " value=" + accumulated_ah +
-            "\nbatteryCap,sensor=" + String(SENSOR_NAME) + " value=" + battery_cap +
-            "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
+            "\nbatteryCap,sensor=" + String(SENSOR_NAME) + " value=" + battery_cap;
+
         if (!(sendInflux(influxpayload)))
 		influxTimer.changePeriod(1000);
+*/
 }
 
 void scheduleInflux() {
