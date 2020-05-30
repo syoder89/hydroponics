@@ -23,7 +23,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 // 36 AH Deka Solar 12V Gel Deep Cycle Battery
 //#define BATTERY_CAPACITY 36000
 // My battery isn't doing so good these days
-#define BATTERY_CAPACITY 10140
+#define BATTERY_CAPACITY 10580
 #define DT SENSOR_UPDATE_INTERVAL / 3600
 
 int pumpPin = D8, flowInPin = D7, flowOutPin = D6;
@@ -158,7 +158,6 @@ void updateStateOfCharge() {
 		/* Recalibrate capacity based on Amp-Hours drawn from it. Note this only works if we hit full charge first */
 		if (didFullCharge)
 			batteryCapacity = ewma_add(batteryCapacity, -1.0 * accumulatedAH);
-		didFullCharge = false;
 	}
 }
 
