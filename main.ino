@@ -153,11 +153,15 @@ void updateStateOfCharge() {
 		accumulatedAH = 0.0;
 		didFullCharge = true;
 	}
-	if (stateOfCharge < 0.0 || batteryVoltage < 11.0) {
+	if (stateOfCharge < 0.0)
+		stateOfCharge = 0.0;
+	/* Battery is dead, charge controller shut down */
+	if (batteryVoltage < 11.0) {
 		stateOfCharge = 0.0;
 		/* Recalibrate capacity based on Amp-Hours drawn from it. Note this only works if we hit full charge first */
 		if (didFullCharge)
-			batteryCapacity = ewma_add(batteryCapacity, -1.0 * accumulatedAH);
+			batteryCapacity = -1.0 * accumulatedAH;
+		didFullCharge = false;
 	}
 }
 
