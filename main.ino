@@ -21,9 +21,9 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 #define HTTP_TIMEOUT 2500
 
 // 36 AH Deka Solar 12V Gel Deep Cycle Battery
-//#define BATTERY_CAPACITY 36000
+#define BATTERY_CAPACITY 20000
 // My battery isn't doing so good these days
-#define BATTERY_CAPACITY 10580
+//#define BATTERY_CAPACITY 10580
 #define DT SENSOR_UPDATE_INTERVAL / 3600
 
 int pumpPin = D8, flowInPin = D7, flowOutPin = D6;
@@ -130,7 +130,9 @@ void initialStateOfCharge() {
 
 	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
 	/* Charge voltage appears fairly linear up to max, panel is 45W */
-	v -= (solarPower / 45.0) * 1.6;
+//	v -= (solarPower / 45.0) * 1.6;
+	if (solarPower > 5)
+		v -= (solarPower / 45.0) * (solarVoltage - batteryVoltage);
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
 
 	stateOfCharge = (v - 11.3) / 1.5 * 100;
