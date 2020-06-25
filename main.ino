@@ -26,7 +26,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 //#define BATTERY_CAPACITY 10580
 #define DT SENSOR_UPDATE_INTERVAL / 3600
 
-int pumpPin = D8, flowInPin = D7, flowOutPin = D6;
+int pumpPin = D8, flowInPin = D6, flowOutPin = D5;
 Timer sensorsTimer(SENSOR_UPDATE_INTERVAL*1000, readSensors);
 Timer pumpStateTimer(60*1000, evaluatePumpState);
 Timer pumpOffTimer(5*60*1000, pumpOff, true);
@@ -131,8 +131,12 @@ void initialStateOfCharge() {
 	/* Theory - compensate for solar charging linearly with a 1.6V float at the top */
 	/* Charge voltage appears fairly linear up to max, panel is 45W */
 //	v -= (solarPower / 45.0) * 1.6;
+/*
 	if (solarPower > 5)
-		v -= (solarPower / 45.0) * (solarVoltage - batteryVoltage);
+		v -= (solarPower / 120.0) * (solarVoltage - batteryVoltage);
+*/
+	if (solarVoltage > 12.8)
+		v -= (solarVoltage - 12.8);
 	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
 
 	stateOfCharge = (v - 11.3) / 1.5 * 100;
@@ -375,32 +379,32 @@ void evaluatePumpState() {
         wBatteryVoltage = ewma_add(wBatteryVoltage, batteryVoltage);
 
 	/* No solar */
-	if (wSolarPower < 1.0) {
+	if (wSolarPower < 5.0) {
 		pumpRunTime = 5;
 		pumpOffTime = 25;
-	/* Some sun (10W) */
-	} else if (wSolarPower < 10.0) {
+	/* Some sun (20W) */
+	} else if (wSolarPower < 20.0) {
 		pumpRunTime = 5;
 		pumpOffTime = 20;
-	/* Almost break even sun (18W) */
-	} else if (wSolarPower < 18.0) {
+	/* Almost break even sun (30W) */
+	} else if (wSolarPower < 30.0) {
 		pumpRunTime = 10;
 		pumpOffTime = 20;
-	/* Some sun (30W) */
-	} else if (wSolarPower < 35.0) {
+	/* Some sun (80W) */
+	} else if (wSolarPower < 80.0) {
 		pumpRunTime = 20;
 		pumpOffTime = 10;
-	/* Full sun (>35W) */
+	/* Full sun (>80W) */
 	} else {
 		pumpRunTime = 30;
 		pumpOffTime = 10;
 	}
 	/* If it's fully charged or super hot run more */
-	if (wBatteryVoltage > 14.0 || rawtemp >= 45.0) {
+	if (wBatteryVoltage > 14.0 || rawtemp >= 55.0) {
 		pumpRunTime = 30;
 		pumpOffTime = 5;
-	/* If it's still pretty hot (>100F in the box) then run more */
-	} else if (rawtemp >= 38.0) {
+	/* If it's still pretty hot (>113F in the box) then run more */
+	} else if (rawtemp >= 45.0) {
 		pumpRunTime = max(pumpRunTime, 30);
 		pumpOffTime = 10;
 	}

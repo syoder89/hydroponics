@@ -72,7 +72,7 @@ void Adafruit_INA219::wireReadRegister(uint8_t reg, uint16_t *value) {
  *          occurs at 3.2A.
  *  @note   These calculations assume a 0.1 ohm resistor is present
  */
-void Adafruit_INA219::setCalibration_32V_8A() {
+void Adafruit_INA219::setCalibration_32V_16A() {
   // By default we use a pretty huge range for the input voltage,
   // which probably isn't the most appropriate choice for system
   // that don't use a lot of power.  But all of the calculations
@@ -81,40 +81,40 @@ void Adafruit_INA219::setCalibration_32V_8A() {
   // setting the VBUS_MAX to 16V instead of 32V, etc.
 
   // VBUS_MAX = 32V             (Assumes 32V, can also be set to 16V)
-  // VSHUNT_MAX = 0.08          (Assumes Gain 2, 80mV, can also be 0.16, 0.08, 0.04)
+  // VSHUNT_MAX = 0.16          (Assumes Gain 2, 80mV, can also be 0.16, 0.08, 0.04)
   // RSHUNT = 0.01               (Resistor value in ohms)
 
   // 1. Determine max possible current
   // MaxPossible_I = VSHUNT_MAX / RSHUNT
-  // MaxPossible_I = 8.0A
+  // MaxPossible_I = 16.0A
 
   // 2. Determine max expected current
-  // MaxExpected_I = 6.0A
+  // MaxExpected_I = 9.0A
 
   // 3. Calculate possible range of LSBs (Min = 15-bit, Max = 12-bit)
   // MinimumLSB = MaxExpected_I/32767
-  // MinimumLSB = 0.000183              (183uA per bit)
+  // MinimumLSB = 0.000275              (275uA per bit)
   // MaximumLSB = MaxExpected_I/4096
-  // MaximumLSB = 0.001465              (1.465mA per bit)
+  // MaximumLSB = 0.002197              (2.197mA per bit)
 
   // 4. Choose an LSB between the min and max values
   //    (Preferrably a roundish number close to MinLSB)
-  // CurrentLSB = 0.00025 (250uA per bit)
+  // CurrentLSB = 0.00050 (500uA per bit)
 
   // 5. Compute the calibration register
   // Cal = trunc (0.04096 / (Current_LSB * RSHUNT))
-  // Cal = 16384
+  // Cal = 8192
 
-  ina219_calValue = 20480;
+  ina219_calValue = 8192;
 
   // 6. Calculate the power LSB
   // PowerLSB = 20 * CurrentLSB
-  // PowerLSB = 0.005 (5mW per bit)
+  // PowerLSB = 0.010 (10mW per bit)
 
   // 7. Compute the maximum current and shunt voltage values before overflow
   //
   // Max_Current = Current_LSB * 32767
-  // Max_Current = 8.1918A before overflow
+  // Max_Current = 16.384A before overflow
   //
   // If Max_Current > Max_Possible_I then
   //    Max_Current_Before_Overflow = MaxPossible_I
@@ -123,7 +123,7 @@ void Adafruit_INA219::setCalibration_32V_8A() {
   // End If
   //
   // Max_ShuntVoltage = Max_Current_Before_Overflow * RSHUNT
-  // Max_ShuntVoltage = 0.08V
+  // Max_ShuntVoltage = 0.16V
   //
   // If Max_ShuntVoltage >= VSHUNT_MAX
   //    Max_ShuntVoltage_Before_Overflow = VSHUNT_MAX
@@ -133,19 +133,19 @@ void Adafruit_INA219::setCalibration_32V_8A() {
 
   // 8. Compute the Maximum Power
   // MaximumPower = Max_Current_Before_Overflow * VBUS_MAX
-  // MaximumPower = 8.0 * 32V
-  // MaximumPower = 256.0W
+  // MaximumPower = 16.0 * 32V
+  // MaximumPower = 512.0W
 
   // Set multipliers to convert raw current/power values
-  ina219_currentDivider_mA = 4; // Current LSB = 250uA per bit (1000/250 = 4)
-  ina219_powerMultiplier_mW = 5; // Power LSB = 1mW per bit (5/1)
+  ina219_currentDivider_mA = 2; // Current LSB = 500uA per bit (1000/500 = 2)
+  ina219_powerMultiplier_mW = 10; // Power LSB = 10mW per bit (10/1)
 
   // Set Calibration register to 'Cal' calculated above
   wireWriteRegister(INA219_REG_CALIBRATION, ina219_calValue);
 
   // Set Config register to take into account the settings above
   uint16_t config = INA219_CONFIG_BVOLTAGERANGE_32V |
-                    INA219_CONFIG_GAIN_2_80MV | INA219_CONFIG_BADCRES_12BIT |
+                    INA219_CONFIG_GAIN_4_160MV | INA219_CONFIG_BADCRES_12BIT |
                     INA219_CONFIG_SADCRES_12BIT_1S_532US |
                     INA219_CONFIG_MODE_SANDBVOLT_CONTINUOUS;
   wireWriteRegister(INA219_REG_CONFIG, config);
@@ -440,7 +440,7 @@ void Adafruit_INA219::init() {
   _i2c->begin();
   // Set chip to large range config values to start
 //  setCalibration_32V_2A();
-  setCalibration_32V_8A();
+  setCalibration_32V_16A();
 }
 
 /*!
