@@ -21,7 +21,8 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 #define HTTP_TIMEOUT 2500
 
 // 36 AH Deka Solar 12V Gel Deep Cycle Battery
-#define BATTERY_CAPACITY 20000
+// My dual batteries are pretty bad also
+#define BATTERY_CAPACITY 17350
 // My battery isn't doing so good these days
 //#define BATTERY_CAPACITY 10580
 #define DT SENSOR_UPDATE_INTERVAL / 3600
