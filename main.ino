@@ -382,15 +382,15 @@ void evaluatePumpState() {
 	/* No solar */
 	if (wSolarPower < 5.0) {
 		pumpRunTime = 5;
-		pumpOffTime = 25;
+		pumpOffTime = 15;
 	/* Some sun (20W) */
 	} else if (wSolarPower < 20.0) {
-		pumpRunTime = 5;
-		pumpOffTime = 20;
+		pumpRunTime = 10;
+		pumpOffTime = 15;
 	/* Almost break even sun (30W) */
 	} else if (wSolarPower < 30.0) {
-		pumpRunTime = 10;
-		pumpOffTime = 20;
+		pumpRunTime = 15;
+		pumpOffTime = 15;
 	/* Some sun (80W) */
 	} else if (wSolarPower < 80.0) {
 		pumpRunTime = 20;
@@ -417,7 +417,7 @@ void evaluatePumpState() {
 */
 	if (stateOfCharge < 30.0) {
 		pumpRunTime = 1;
-		pumpOffTime = 119;
+		pumpOffTime = 59;
 	}
 }
 
