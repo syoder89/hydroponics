@@ -18,7 +18,7 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 #define SENSOR_UPDATE_INTERVAL 3
 #define INFLUX_UPDATE_INTERVAL 30
 #define FLOWRATE_UPDATE_INTERVAL INFLUX_UPDATE_INTERVAL
-#define HTTP_TIMEOUT 2500
+#define HTTP_TIMEOUT 5000
 
 // 36 AH Deka Solar 12V Gel Deep Cycle Battery
 // My dual batteries are pretty bad also
@@ -48,16 +48,15 @@ double batteryCapacity = BATTERY_CAPACITY;
 int uptime;
 boolean doPublish = false, doInflux = false;
 double flowRateIn, flowRateOut, flowIn, flowOut;
-int pulsesIn = 0, pulsesOut = 0;
-uint8_t lastflowpinstate, lastflowpoutstate;
+int pulsesIn = 0, pulsesOut = 0, reconnects = 0, influxFails = 0;
+unsigned long lastPulses;
 
 void setup() {
 	Serial.begin(115200);
 	pinMode(pumpPin, OUTPUT);
 	pinMode(flowInPin, INPUT_PULLUP);
 	pinMode(flowOutPin, INPUT_PULLUP);
-	lastflowpinstate = digitalRead(flowInPin);
-	lastflowpoutstate = digitalRead(flowOutPin);
+	lastPulses = millis();
 	attachInterrupt(flowInPin, handleFlowRateIn, FALLING);
 	attachInterrupt(flowOutPin, handleFlowRateOut, FALLING);
 	ina219.begin();
@@ -118,12 +117,16 @@ void handleFlowRateOut() {
 }
 
 void updateFlowRate() {
-	flowRateIn = pulsesIn / (7.5 * FLOWRATE_UPDATE_INTERVAL);
-	flowRateOut = pulsesOut / (7.5 * FLOWRATE_UPDATE_INTERVAL);
-	pulsesIn = 0;
-	pulsesOut = 0;
+	flowRateIn = pulsesIn / (7.5 * ((millis() - lastPulses)/1000));
+	flowRateOut = pulsesOut / (7.5 * ((millis() - lastPulses)/1000));
 //	flowRateIn = ewma_add(flowRateIn, flowIn);
 //	flowRateOut = ewma_add(flowRateOut, flowOut);
+}
+
+void resetFlowRate() {
+	pulsesIn = 0;
+	pulsesOut = 0;
+	lastPulses = millis();
 }
 
 void initialStateOfCharge() {
@@ -138,9 +141,9 @@ void initialStateOfCharge() {
 */
 	if (solarVoltage > 12.8)
 		v -= (solarVoltage - 12.8);
-	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.3V */
+	/* Theory - linear discharge, close but not quite, from 12.8V down to 11.0V */
 
-	stateOfCharge = (v - 11.3) / 1.5 * 100;
+	stateOfCharge = (v - 11.0) / 1.5 * 100;
 	if (stateOfCharge > 100.0)
 		stateOfCharge = 100.0;
 	if (stateOfCharge < 0.0)
@@ -155,7 +158,7 @@ void updateStateOfCharge() {
 	if (accumulatedAH > 0.0)
 		accumulatedAH = 0.0;
 	stateOfCharge -= (100 * ((batteryCurrent / batteryCapacity) * DT));
-	if (stateOfCharge > 100.0 || batteryVoltage > 14.1) {
+	if (stateOfCharge > 100.0 || (batteryVoltage > 14.0 && solarCurrent < 20.0)) {
 		stateOfCharge = 100.0;
 		accumulatedAH = 0.0;
 		didFullCharge = true;
@@ -269,6 +272,7 @@ void publishInflux() {
 	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\ntemperature,sensor=%s value=%.2f", SENSOR_NAME, rawtemp);
 	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nhumidity,sensor=%s value=%.2f", SENSOR_NAME, rawhumidity);
         if (!(sendInflux(payload))) {
+		influxFails++;
 		influxTimer.changePeriod(1000);
 		return;
 	}
@@ -281,58 +285,14 @@ void publishInflux() {
 	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nstateOfCharge,sensor=%s value=%.2f", SENSOR_NAME, stateOfCharge);
 	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\naccumulatedAH,sensor=%s value=%.2f", SENSOR_NAME, accumulatedAH);
 	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nbatteryCap,sensor=%s value=%.2f", SENSOR_NAME, batteryCapacity);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\nreconnects,sensor=%s value=%d", SENSOR_NAME, reconnects);
+	snprintf(payload + strlen(payload), INFLUX_MAXLEN - strlen(payload), "\ninfluxFails,sensor=%s value=%d", SENSOR_NAME, influxFails);
         if (!(sendInflux(payload))) {
+		influxFails++;
 		influxTimer.changePeriod(1000);
 		return;
 	}
-/*
-	String influxpayload;
-
-	updateFlowRate();
-        sprintf(solar_current, "%.2f", solarCurrent);
-        sprintf(solar_voltage, "%.2f", solarVoltage);
-        sprintf(solar_power, "%.2f", solarPower);
-        sprintf(battery_current, "%.2f", batteryCurrent);
-        sprintf(battery_voltage, "%.2f", batteryVoltage);
-        sprintf(battery_power, "%.2f", batteryPower);
-        sprintf(used_power, "%.2f", totalPower);
-        sprintf(run_time, "%d", uptime);
-        sprintf(temperature, "%.2f", rawtemp);
-	sprintf(humidity, "%.2f", rawhumidity);
-
-	sprintf(pump_running, "%d", pumpRunning ? 1 : 0);
-	sprintf(pump_runtime, "%d", pumpRunTime);
-	sprintf(pump_offtime, "%d", pumpOffTime);
-	sprintf(flow_rate_in, "%.2f", flowRateIn);
-	sprintf(flow_rate_out, "%.2f", flowRateOut);
-	sprintf(state_of_charge, "%.2f", stateOfCharge);
-	sprintf(accumulated_ah, "%.2f", accumulatedAH);
-	sprintf(battery_cap, "%.2f", batteryCapacity);
-
-	influxpayload = "solar_current,sensor=" + String(SENSOR_NAME) + " value=" + solar_current +
-            "\nsolar_voltage,sensor=" + String(SENSOR_NAME) + " value=" + solar_voltage +
-            "\nsolar_power,sensor=" + String(SENSOR_NAME) + " value=" + solar_power +
-            "\nbattery_current,sensor=" + String(SENSOR_NAME) + " value=" + battery_current +
-            "\nbattery_voltage,sensor=" + String(SENSOR_NAME) + " value=" + battery_voltage +
-            "\nbattery_power,sensor=" + String(SENSOR_NAME) + " value=" + battery_power +
-            "\nused_power,sensor=" + String(SENSOR_NAME) + " value=" + used_power +
-            "\nrun_time,sensor=" + String(SENSOR_NAME) + " value=" + run_time +
-            "\nhumidity,sensor=" + String(SENSOR_NAME) + " value=" + humidity +
-            "\ntemperature,sensor=" + String(SENSOR_NAME) + " value=" + temperature;
-
-        sendInflux(influxpayload);
-	influxpayload = "pump_running,sensor=" + String(SENSOR_NAME) + " value=" + pump_running +
-            "\npump_runtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_runtime +
-            "\npump_offtime,sensor=" + String(SENSOR_NAME) + " value=" + pump_offtime +
-            "\nflowRateIn,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_in +
-            "\nflowRateOut,sensor=" + String(SENSOR_NAME) + " value=" + flow_rate_out +
-            "\nstateOfCharge,sensor=" + String(SENSOR_NAME) + " value=" + state_of_charge +
-            "\naccumulatedAH,sensor=" + String(SENSOR_NAME) + " value=" + accumulated_ah +
-            "\nbatteryCap,sensor=" + String(SENSOR_NAME) + " value=" + battery_cap;
-
-        if (!(sendInflux(influxpayload)))
-		influxTimer.changePeriod(1000);
-*/
+	resetFlowRate();
 }
 
 void scheduleInflux() {
@@ -472,6 +432,7 @@ int cloudInflux(String extra) {
 void loop() {
 	if (Particle.connected() == false) {
 		Particle.connect();
+		reconnects++;
 	}
 	uptime = millis()/1000;
 /*
